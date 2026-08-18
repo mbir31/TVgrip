@@ -1,155 +1,532 @@
-# 🎮 TVGrip — Next-Gen Android TV Smart Controller & Multiplayer Gamepad
+# 📺 TVGrip
 
 <div align="center">
 
-![Android](https://img.shields.io/badge/Platform-Android_8.0+-3DDC84?style=for-the-badge&logo=android&logoColor=white)
-![Kotlin](https://img.shields.io/badge/Language-Kotlin_100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
-![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack_Compose_M3-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)
-![Size](https://img.shields.io/badge/APK_Size-Ultra_Lightweight-brightgreen?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
+### 🎮 Your TV. Your Phone. One Powerful Controller.
+
+Turn your Android phone into an all-in-one remote, air mouse, motion steering wheel, keyboard, voice controller & 4-player gamepad.
+
+Built for Android TV & Google TV.
 
 <br/>
 
-**Transform your phone into a high-precision, sub-millisecond tactile remote, 6-DoF gyro air mouse, real-time motion steering wheel, and a 4-player arcade gamepad for any Android TV or Google TV.**
+[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://www.android.com/)
+[![Kotlin](https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-Material_3-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/compose)
+[![Open Source](https://img.shields.io/badge/Open%20Source-Yes-brightgreen?style=for-the-badge)](#-open-source)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](#-license)
 
-[✨ Key Features](#-standout-features) • [⚡ Why TVGrip Beats Others](#-why-tvgrip-vs-traditional-remote-apps) • [🎮 Controller Modes](#-all-in-one-controller-modes) • [🚀 Getting Started](#-getting-started) • [🛠️ Architecture](#-technical-architecture)
+<br/>
+
+**📱 One phone. 🎮 Multiple controllers. 📺 One big-screen experience.**
 
 </div>
 
 ---
 
-## 🌟 Why TVGrip? (The Pain We Solve)
+### 😩 Tired of searching for the remote?
 
-Traditional TV remote apps are bloated with full-screen ads, suffer from sluggish Wi-Fi lag, drop connections constantly, and only give you a basic set of buttons. 
+Your physical remote is missing.
 
-**TVGrip re-engineers the smart TV companion experience from the ground up**:
-- ⚡ **Zero Bloat & Ultra-Fast**: Stripped of heavy tracking and ad frameworks for instant launches and minimal battery consumption.
-- 🎯 **Sub-Millisecond Response**: High-throughput async non-blocking socket pipeline delivering instantaneous tactile response.
-- 🕹️ **Console-Grade Multi-Input**: Beyond a simple remote — play multiplayer arcade titles, steer racing games with gyro tilt, or browse streaming apps with precision air-mouse pointing.
+The batteries are dead.
 
----
+Typing on your TV is painfully slow.
 
-## ⚡ Why TVGrip vs. Traditional Remote Apps
+You want to play a racing game but don't have a controller.
 
-| Feature / Metric | 🔴 Generic TV Remote Apps | 🟢 **TVGrip** |
-| :--- | :--- | :--- |
-| **Input Latency** | 150ms – 400ms (Noticeable lag) | **< 15ms (Near-Instantaneous / High-Precision)** |
-| **Ads & Intrusions** | Aggressive banner & video popups | **100% Free & Open Source, Zero Ads** |
-| **Motion Tilt Steering Wheel** | ❌ Not Supported | **✅ Gyroscope & Accelerometer Physics Engine** |
-| **6-DoF Gyro Air Mouse** | ❌ Rare / Jittery | **✅ Smooth Kalman-Filtered Gyro Pointer** |
-| **Multiplayer Party Mode** | ❌ 1 device only | **✅ 4-Player Local Gamepad Lobby (P1–P4)** |
-| **Discovery Protocol** | Single-method (Often fails) | **✅ Dual-Engine (mDNS/DNS-SD + Subnet IP Sweep)** |
-| **Multi-TV Support** | Clunky manual reconnect | **✅ Instant Multi-TV Switcher with Custom Names** |
-| **Haptic Feedback Engine** | Plain vibrator or None | **✅ Customized Multi-Level Tactile Haptics** |
-| **APK Footprint** | 45 MB – 80 MB+ | **✅ Ultra-Compact (< 8 MB compressed)** |
+You need a mouse to navigate a browser on your TV.
 
----
+**Why carry five different devices when your phone can do it all?**
 
-## 🎮 All-in-One Controller Modes
+Meet **TVGrip**.
 
-### 1. 🎛️ Tactile D-Pad & Media Shuttle
-- **Deep directional pad** with precise key repeat and continuous scroll gestures.
-- **Dedicated Media Controls**: Play, Pause, Rewind, Fast-Forward, Mute, and Volume Rocker.
-- **System Shortcuts**: Instant TV Home, Back, Input Switcher, and Power toggle.
+TVGrip transforms your Android phone into a powerful companion controller for your Android TV or Google TV.
 
-### 2. 🖱️ 6-DoF Gyro Air Mouse & Trackpad
-- Point your phone at the screen to glide the cursor seamlessly across web browsers, Kodi, side-loaded apps, and streaming platforms.
-- Includes smooth inertial filtering, double-tap drag-and-drop, and scroll gestures.
+It's not just another remote app.
 
-### 3. 🏎️ Motion Tilt Steering Wheel (Racing Mode)
-- Turn your phone horizontally into a true racing wheel.
-- Utilizes device gravity sensors and accelerometers for fine steering angles with dual on-screen throttle and brake pedals plus gear shifting.
+It's your:
 
-### 4. 🕹️ 4-Player Arcade Gamepad (P1 – P4)
-- Host multiplayer game nights on Android TV (Beach Buggy Racing, Crossy Road, Bombsquad, RetroArch, etc.).
-- Each phone assigns to **Player 1, Player 2, Player 3, or Player 4** with dedicated arcade color schemes, responsive ABXY buttons, dual bumper triggers, and rumble feedback.
+- 🎛️ **Smart TV Remote**
+- 🖱️ **Air Mouse & Trackpad**
+- 🏎️ **Motion Racing Wheel**
+- 🎮 **4-Player Gamepad**
+- 🎙️ **Voice Controller**
+- ⌨️ **TV Keyboard**
 
-### 5. 🎙️ Quick Voice Search & Keyboard Sync
-- Send voice commands directly to your TV's search bar.
-- Effortlessly type passwords, URLs, and search queries from your phone's native keyboard without painful TV on-screen typing.
+All inside one native Android app.
 
 ---
 
-## 📡 Intelligent Dual-Engine TV Discovery
+## 🌟 WHY TVGRIP?
 
-Never struggle to find your TV on the network:
-1. **mDNS / DNS-SD Service Discovery**: Automatically detects `_androidtvremote2._tcp` and Google Cast endpoints.
-2. **Rapid Subnet Sweep**: Concurrently probes local `/24` subnet IP ranges to discover custom-port smart TVs and companion daemons within seconds.
-3. **One-Tap Pairing**: Saves known TV profiles, custom names (e.g. *Living Room OLED*, *Bedroom TV*), and preferred default devices.
+**One app. Almost everything you need.**
+
+Instead of switching between different controllers, TVGrip puts your essential TV controls and entertainment inputs right in your hand.
+
+- 🎛️ **Control your TV**: Navigate menus, adjust volume, change inputs, control playback and access system functions.
+- 🖱️ **Point at your TV**: Turn your phone into a motion-controlled air mouse and move the pointer around the screen.
+- 🏎️ **Race using your phone**: Tilt your phone like a steering wheel and control compatible racing games.
+- 🎮 **Game with friends**: Connect multiple phones and turn them into individual gamepads for multiplayer Android TV games.
+- 🎙️ **Speak to your TV**: Use your phone's microphone for convenient voice searching.
+- ⌨️ **Type from your phone**: Enter passwords, URLs and search queries using your phone's keyboard instead of the TV's painfully slow on-screen keyboard.
 
 ---
 
-## 🛠️ Technical Architecture
+## 🎮 THE CONTROLLERS INSIDE TVGRIP
 
-Built purely with modern, clean Android development standards:
+### 1. 🎛️ Full Smart TV Remote
+
+Everything you expect from a remote, plus more.
+
+#### Navigation
+- ⬆️ Up
+- ⬇️ Down
+- ⬅️ Left
+- ➡️ Right
+- ⭕ Select / OK
+
+#### Media controls
+- ▶️ Play
+- ⏸️ Pause
+- ⏪ Rewind
+- ⏩ Fast Forward
+- 🔇 Mute
+- 🔊 Volume
+
+#### TV shortcuts
+- 🏠 Home
+- ↩️ Back
+- 🔄 Input
+- ⏻ Power
+
+*Your phone becomes the remote you always know where to find.*
+
+---
+
+### 🖱️ 2. AIR MOUSE + TRACKPAD
+
+**Point. Move. Click.**
+
+Turn your phone into a motion-controlled pointer.
+
+Simply aim your phone at the TV and move your hand.
+
+TVGrip uses your device's motion sensors to translate movement into precise pointer control.
+
+**Great for:**
+- 🌐 TV web browsers
+- 📺 Streaming apps
+- 🧩 Side-loaded applications
+- 🗂️ Media centers such as Kodi
+- ⚙️ Settings & menus
+
+**Also includes:**
+- Smooth motion filtering
+- Scroll gestures
+- Double-tap interactions
+- Drag-and-drop support
+
+*No physical mouse required.*
+
+---
+
+### 🏎️ 3. MOTION RACING WHEEL
+
+**Your phone becomes the steering wheel.**
+
+Turn your phone sideways.
+
+Tilt left.
+
+Tilt right.
+
+And drive.
+
+TVGrip uses your phone's motion sensors to create a natural steering experience.
+
+**Racing controls include:**
+- 🏎️ Motion steering
+- 🟢 Accelerator
+- 🔴 Brake
+- ⚙️ Gear controls
+
+Perfect for compatible racing games on Android TV.
+
+> *«Lean into the corner. Feel the race.»*
+
+---
+
+### 🎮 4. 4-PLAYER GAMEPAD
+
+**Turn your living room into a gaming zone.**
+
+Don't have four physical controllers?
+
+Use four phones.
+
+TVGrip supports a local multiplayer setup where each phone can join as:
+
+- 🟢 **PLAYER 1**
+- 🔵 **PLAYER 2**
+- 🟡 **PLAYER 3**
+- 🔴 **PLAYER 4**
+
+**Each player gets a dedicated controller interface with:**
+- 🎮 ABXY buttons
+- 🎯 Directional controls
+- 🕹️ Analog-style controls
+- 🔘 Shoulder buttons
+- 📳 Haptic feedback
+
+*Perfect for game night.*
+
+**Play compatible Android TV multiplayer games such as:**
+- 🏎️ Racing games
+- 💣 Party games
+- 🕹️ Retro games
+- 👾 Arcade games
+
+*Invite your friends. Grab your phones. Start playing.*
+
+---
+
+### 🎙️ 5. VOICE SEARCH
+
+**Stop typing on your TV.**
+
+Searching for a movie?
+
+Looking for a YouTube video?
+
+Trying to find a new show?
+
+Just use your phone.
+
+1. 🎙️ Tap voice.
+2. 🗣️ Speak.
+3. 📺 Search on your TV.
+
+*It's faster and more natural than navigating a TV keyboard.*
+
+---
+
+### ⌨️ 6. PHONE KEYBOARD
+
+**Finally, a painless way to type on TV.**
+
+Entering:
+- 🔐 Passwords
+- 🌐 URLs
+- 🔎 Search queries
+- 📧 Email addresses
+- 📱 App login information
+
+...using a TV remote can be frustrating.
+
+TVGrip lets you use your phone's familiar keyboard instead.
+
+**Type on your phone → send it to the TV.**
+
+---
+
+## 📡 SMART TV DISCOVERY
+
+**Finding your TV shouldn't be a puzzle.**
+
+TVGrip is designed to automatically discover compatible devices on your local network.
+
+### 🔎 Dual discovery approach
+
+1. **mDNS / DNS-SD**: Detect compatible Android TV Remote and Google Cast service endpoints.
+2. **Local network discovery**: Search the local subnet for compatible TV services and TVGrip endpoints.
+
+### ⭐ Then simply pair.
+
+Once a TV is known, you can save it with a custom name.
+
+For example:
+- 📺 Living Room TV
+- 📺 Bedroom TV
+- 📺 Parents' TV
+- 📺 Office TV
+
+*Switch between saved TVs without repeatedly going through the entire setup process.*
+
+---
+
+## 📺 MULTIPLE TVs? NO PROBLEM.
+
+**One TV controller for your whole home.**
+
+If you have several compatible TVs, TVGrip can keep multiple TV profiles.
+
+**Example:**
+- 🏠 Living Room → LG OLED
+- 🛏️ Bedroom → Android TV
+- 👨💻 Office → Google TV
+
+*Select the TV you want. Connect. Control. Done.*
+
+---
+
+## 📳 FEEL EVERY BUTTON
+
+### Haptic Feedback
+
+TVGrip doesn't just show buttons.
+
+It can make your phone feel like a controller.
+
+Different controls can provide tactile feedback so you can feel your interaction instead of constantly looking down at your phone.
+
+- 🎮 Gamepad buttons
+- 🎛️ Remote controls
+- 🕹️ Interactive controls
+
+*Tap. Feel. Control.*
+
+---
+
+## 🔥 BUILT FOR REAL-LIFE USE
+
+TVGrip isn't designed around one specific use case.
+
+It's useful whenever your phone needs to become an interface for your TV.
+
+- 🍿 **Movie Night**: Control playback without searching for the physical remote.
+- 📺 **Streaming**: Navigate apps, adjust volume and search for content.
+- 🌐 **TV Browsing**: Use the air mouse to navigate web pages.
+- 🎮 **Game Night**: Turn multiple phones into multiplayer controllers.
+- 🏎️ **Racing**: Use motion steering for compatible racing games.
+- 🔎 **Searching**: Speak instead of typing.
+- ⌨️ **Login & Setup**: Use your phone keyboard for faster text entry.
+
+---
+
+## 🛡️ PRIVACY FIRST
+
+**Your remote commands belong on your network.**
+
+TVGrip is designed around local communication between your phone and compatible TV devices.
+
+- 🔒 **No unnecessary tracking**: The project does not require analytics or advertising frameworks simply to function as a remote.
+- 🎙️ **Microphone**: Microphone access is used when you activate voice functionality.
+- 📳 **Vibration**: Vibration access is used for tactile feedback.
+- 🌐 **Local network**: TV control communication is designed around your local network environment.
+
+*Your phone should be your remote, not a source of unwanted tracking.*
+
+---
+
+## ⚡ LIGHTWEIGHT & NATIVE
+
+TVGrip is built as a native Android application using modern Android technologies.
+
+### Under the hood:
+- ⚡ Kotlin
+- 🎨 Jetpack Compose
+- 🧩 Material 3
+- 🔄 Kotlin Coroutines
+- 📡 Android TV Remote protocols
+- 📡 mDNS / DNS-SD discovery
+- 📱 Gyroscope & accelerometer sensors
+- 🗄️ Room Database
+- 🎙️ Speech recognition
+- 🎮 Multiplayer controller coordination
+
+*The result is a purpose-built Android controller rather than a bloated web wrapper.*
+
+---
+
+## 📱 REQUIREMENTS
+
+- **Phone**: Android 8.0 / API 26 or newer
+- **TV**: Compatible Android TV, Google TV, or compatible Android TV boxes
+- **Network**: Your phone and TV should normally be connected to the same local Wi-Fi network for discovery and communication.
+
+---
+
+## 🚀 GET STARTED
+
+1. **1️⃣ Install TVGrip**: Install the TVGrip APK on your Android phone.
+2. **2️⃣ Connect to Wi-Fi**: Make sure your phone and compatible TV are connected to the same local network.
+3. **3️⃣ Open TVGrip**: Launch the app and allow the required permissions.
+4. **4️⃣ Find your TV**: Let TVGrip discover compatible devices.
+5. **5️⃣ Pair**: Select your TV and complete the pairing process if requested.
+6. **6️⃣ Choose your controller**:
+   - 🎛️ Remote
+   - 🖱️ Air Mouse
+   - 🏎️ Motion Wheel
+   - 🎮 Gamepad
+   - 🎙️ Voice
+   - ⌨️ Keyboard
+
+*And you're ready.*
+
+---
+
+## 📸 SCREENSHOTS
+
+> *«Recommended: Add real screenshots/GIFs here. For the strongest marketing impact, show the actual app rather than mockups.»*
+
+- 🏠 **Main Controller**: Show the primary TV remote interface.
+- 🖱️ **Air Mouse**: Show the motion pointer interface.
+- 🏎️ **Racing Mode**: Show the motion steering wheel.
+- 🎮 **Gamepad**: Show the multiplayer gamepad interface.
+- 📡 **TV Discovery**: Show the device discovery screen.
+- 📺 **Multi-TV**: Show saved TVs and quick switching.
+
+---
+
+## 🎬 SEE TVGRIP IN ACTION
+
+> *«A short 20–40 second demo video would dramatically improve this README.»*
+
+**Recommended sequence:**
+- `0–5 sec`: Lost physical remote → open TVGrip.
+- `5–10 sec`: TV discovery → connect.
+- `10–15 sec`: Control TV with D-pad.
+- `15–20 sec`: Switch to Air Mouse.
+- `20–25 sec`: Switch to Racing Wheel.
+- `25–30 sec`: Four phones → four players.
+
+**Final frame:**
+- 📺 One Phone.
+- 🎮 Six Controllers.
+- ❤️ One TVGrip.
+
+---
+
+## 🧑💻 FOR DEVELOPERS
+
+TVGrip is built with modern native Android architecture.
 
 ```
 app/src/main/java/com/example/
 ├── core/
-│   ├── data/local/         # Room Database (Multi-TV storage & preferences)
-│   ├── network/            # Dual Discovery, Android TV Remote v2 & TVGrip Protocol
-│   ├── sensors/            # Gyroscope & Motion Steering sensor fusion engines
-│   ├── voice/              # Speech recognition & audio bridge
-│   └── multiplayer/        # 4-Player Lobby & Slot Coordinator
+│   ├── data/local/
+│   │   └── Room database & preferences
+│   │
+│   ├── network/
+│   │   ├── TV discovery
+│   │   ├── Android TV Remote
+│   │   └── TVGrip protocol
+│   │
+│   ├── sensors/
+│   │   └── Gyroscope & motion processing
+│   │
+│   ├── voice/
+│   │   └── Speech recognition
+│   │
+│   └── multiplayer/
+│       └── 4-player coordination
+│
 ├── ui/
-│   ├── components/         # Haptic D-Pads, Arcade Buttons, Analog Sticks
-│   ├── screens/            # Remote, Touchpad, Gamepad, Motion, Discovery, Diagnostics
-│   └── theme/              # Material Design 3 Dynamic Color Scheme
-└── MainActivity.kt         # Edge-to-Edge Single-Activity Architecture
+│   ├── components/
+│   ├── screens/
+│   └── theme/
+│
+└── MainActivity.kt
 ```
 
-- **UI Layer**: 100% Jetpack Compose with Material 3 dynamic theming.
-- **Async Concurrency**: Kotlin Coroutines & `StateFlow` for zero-frame-drop rendering.
-- **Persistence**: Room DB for fast, structured local data storage.
-- **Lifecycle Optimization**: Android Q+ `onTrimMemory` compliant with active sensor auto-release.
+### Technology Stack
+
+| Technology | Purpose |
+| :--- | :--- |
+| **Kotlin** | Application development |
+| **Jetpack Compose** | UI |
+| **Material 3** | Design system |
+| **Coroutines** | Asynchronous operations |
+| **StateFlow** | Reactive state |
+| **Room** | Local persistence |
+| **Android Sensors** | Motion controls |
+| **mDNS / DNS-SD** | Device discovery |
+| **Android TV protocols** | TV communication |
+| **Speech Recognition** | Voice search |
 
 ---
 
-## 🚀 Getting Started
+## 🔧 BUILD FROM SOURCE
 
-### Prerequisites
-- Android device running **Android 8.0 (API level 26)** or higher.
-- Smart TV or Android TV box connected to the same Wi-Fi network.
-
-### Build from Source
+Clone the repository:
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-username/tvgrip.git
-cd tvgrip
+git clone https://github.com/mbir31/TVgrip.git
+cd TVgrip
+```
 
-# 2. Build the optimized APK
+Build the release APK:
+```bash
 ./gradlew assembleRelease
+```
 
-# 3. Install on your connected device
+Install a debug build on a connected Android device:
+```bash
 ./gradlew installDebug
 ```
 
 ---
 
-## 🛡️ Privacy & Permissions
+## 🤝 OPEN SOURCE
 
-TVGrip respects your privacy completely:
-- 🔒 **No Analytics / No Tracking**: Your keystrokes and remote commands stay strictly on your local home Wi-Fi network.
-- 🎙️ **Microphone Permission**: Used purely for real-time speech-to-text conversion when you tap the voice button.
-- 📳 **Vibration**: Used solely to provide realistic tactile feedback on button presses.
+TVGrip is open source and contributions are welcome.
+
+- 🐛 **If you find a bug**: Open an issue
+- 💡 **If you have an idea**: Start a discussion or feature request
+- 🔧 **If you want to improve the project**: Submit a pull request
+- ⭐ **And if you simply like the project**: Give TVGrip a Star
+
+*Every star helps more developers and Android TV users discover the project.*
 
 ---
 
-## 🤝 Contributing
+## 🌟 WHY STAR TVGRIP?
 
-Contributions, feature suggestions, and pull requests are warmly welcomed!
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Because a physical remote shouldn't be the only way to control your TV.
+
+Because your phone already has:
+- 📱 A touchscreen
+- 🎙️ A microphone
+- 🌀 Motion sensors
+- ⌨️ A keyboard
+- 📳 Haptic feedback
+- 🌐 Wi-Fi
+
+*TVGrip brings those capabilities together into one controller.*
+
+---
+
+<div align="center">
+
+## 📺 TVGRIP
+
+Your phone just became your TV's most powerful controller.
+
+🎛️ Remote • 🖱️ Air Mouse • 🏎️ Racing Wheel • 🎮 Gamepad • 🎙️ Voice • ⌨️ Keyboard
+
+<br/>
+
+**One Phone. One App. Total Control.**
+
+Made with ❤️ for Android TV & Google TV users.
+
+</div>
 
 ---
 
 ## 📄 License
 
-Distributed under the **MIT License**. See `LICENSE` for more information.
+Distributed under the **MIT License**.
+
+See `LICENSE` for more information.
+
+---
 
 <div align="center">
-<b>Made with ❤️ for Android TV & Google TV power users</b>
+
+**Made with love by ©munabbiRMushran ❤️**
+
+**© mbir31 • TVGrip**
+
+### 📺 Control smarter. Play together. Enjoy more.
+
 </div>
