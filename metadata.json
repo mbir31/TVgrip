@@ -1,0 +1,6 @@
+{
+  "name": "TVGrip",
+  "description": "Native Android TV & Google TV all-in-one controller, remote, keyboard, air mouse & game controller.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

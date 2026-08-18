@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- TV Screen outline in background -->
+    <path
+        android:pathData="M32,28 L76,28 A4,4 0 0,1 80,32 L80,56 A4,4 0 0,1 76,60 L32,60 A4,4 0 0,1 28,56 L28,32 A4,4 0 0,1 32,28 Z"
+        android:strokeColor="#4000E5FF"
+        android:strokeWidth="2.5"
+        android:fillColor="#1000E5FF" />
+    <path
+        android:pathData="M50,60 L46,67 L62,67 L58,60"
+        android:strokeColor="#4000E5FF"
+        android:strokeWidth="2"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M42,67 L66,67"
+        android:strokeColor="#4000E5FF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round" />
+
+    <!-- Game Controller Body / Remote Grip -->
+    <path
+        android:pathData="M34,44 C27,44 24,50 25,64 C25.5,71 28,78 35,78 C39,78 43,73 47,68 L61,68 C65,73 69,78 73,78 C80,78 82.5,71 83,64 C84,50 81,44 74,44 C67,44 63,48 54,48 C45,48 41,44 34,44 Z"
+        android:fillColor="#0B1320"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="2.8"
+        android:strokeLineJoin="round" />
+
+    <!-- D-pad (Left) -->
+    <path
+        android:pathData="M33,52 L37,52 L37,56 L41,56 L41,60 L37,60 L37,64 L33,64 L33,60 L29,60 L29,56 L33,56 Z"
+        android:fillColor="#00E5FF" />
+
+    <!-- Action Buttons ABXY (Right) -->
+    <!-- X (Top) -->
+    <path
+        android:pathData="M73,50 A2.5,2.5 0 1,1 73,55 A2.5,2.5 0 1,1 73,50"
+        android:fillColor="#00E5FF" />
+    <!-- A (Bottom) -->
+    <path
+        android:pathData="M73,61 A2.5,2.5 0 1,1 73,66 A2.5,2.5 0 1,1 73,61"
+        android:fillColor="#00E5FF" />
+    <!-- Y (Left) -->
+    <path
+        android:pathData="M67.5,55.5 A2.5,2.5 0 1,1 67.5,60.5 A2.5,2.5 0 1,1 67.5,55.5"
+        android:fillColor="#FF6D00" />
+    <!-- B (Right) -->
+    <path
+        android:pathData="M78.5,55.5 A2.5,2.5 0 1,1 78.5,60.5 A2.5,2.5 0 1,1 78.5,55.5"
+        android:fillColor="#FF6D00" />
+
+    <!-- Center Status Indicator / Touchpad Accent -->
+    <path
+        android:pathData="M50,55 L58,55 A2,2 0 0,1 60,57 L60,60 A2,2 0 0,1 58,62 L50,62 A2,2 0 0,1 48,60 L48,57 A2,2 0 0,1 50,55 Z"
+        android:fillColor="#15263F"
+        android:strokeColor="#FF6D00"
+        android:strokeWidth="1.5" />
+    <path
+        android:pathData="M54,57 A1.5,1.5 0 1,1 54,60 A1.5,1.5 0 1,1 54,57"
+        android:fillColor="#00E5FF" />
+</vector>
