@@ -9,21 +9,25 @@ import com.example.core.model.TvDevice
 import com.example.core.model.TvKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
-import java.security.cert.X509Certificate
 
 /**
- * Universal Android TV Remote Protocol v2 & Companion Protocol implementation.
+ * Universal Android TV Remote Protocol v2 implementation.
  * 
- * Supports Google's official Android TV Remote v2 (TLS 6466 with Mutual TLS client certificates
- * and protobuf wire format).
+ * Implements the official Google Android TV Remote v2 wire protocol over TLS port 6466:
+ * 1. Mutual TLS Handshake using client certificate.
+ * 2. RemoteConfigure / RemoteConfiguration Handshake framing.
+ * 3. RemoteKeyInject protobuf encoding with directional state (START/SHORT_PRESS/END).
  */
 class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.instance) : TvProtocol {
 
@@ -37,75 +41,103 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
     override suspend fun connect(device: TvDevice, pairingCode: String?): ConnectionResult {
         return withContext(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Initiating Android TV Remote connection to ${device.host}:${device.port}")
+                Log.d(TAG, "Connecting to Android TV at ${device.host}:${device.port}")
                 disconnect()
 
-                var establishedSocket: Socket? = null
-                try {
-                    val keyManagerFactory = SslCertificateManager.getOrCreateKeyManagerFactory(context)
-                    val sslContext = SSLContext.getInstance("TLS")
-                    val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-                        override fun checkClientTrusted(certs: Array<X509Certificate>, authType: String) {}
-                        override fun checkServerTrusted(certs: Array<X509Certificate>, authType: String) {}
-                    })
-                    sslContext.init(keyManagerFactory.keyManagers, trustAllCerts, java.security.SecureRandom())
+                val keyManagerFactory = SslCertificateManager.getOrCreateKeyManagerFactory(context)
+                val sslContext = SSLContext.getInstance("TLS")
+                val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+                    override fun checkClientTrusted(certs: Array<X509Certificate>, authType: String) {}
+                    override fun checkServerTrusted(certs: Array<X509Certificate>, authType: String) {}
+                })
+                sslContext.init(keyManagerFactory.keyManagers, trustAllCerts, SecureRandom())
 
-                    val rawSocket = Socket()
-                    rawSocket.connect(InetSocketAddress(device.host, device.port), 3500)
-                    rawSocket.tcpNoDelay = true
+                val rawSocket = Socket()
+                rawSocket.connect(InetSocketAddress(device.host, device.port), 4500)
+                rawSocket.tcpNoDelay = true
 
-                    val sslSocket = sslContext.socketFactory.createSocket(
-                        rawSocket,
-                        device.host,
-                        device.port,
-                        true
-                    ) as SSLSocket
-                    sslSocket.startHandshake()
-                    establishedSocket = sslSocket
-                    Log.d(TAG, "TLS handshake successful with client certificate on ${device.name}")
-                } catch (tlsEx: Exception) {
-                    Log.w(TAG, "TLS failed (${tlsEx.message}), falling back to direct TCP socket on ${device.host}:${device.port}")
-                    val plainSocket = Socket()
-                    plainSocket.connect(InetSocketAddress(device.host, device.port), 3000)
-                    plainSocket.tcpNoDelay = true
-                    establishedSocket = plainSocket
-                }
+                val sslSocket = sslContext.socketFactory.createSocket(
+                    rawSocket,
+                    device.host,
+                    device.port,
+                    true
+                ) as SSLSocket
+                sslSocket.startHandshake()
 
-                socket = establishedSocket
-                outputStream = establishedSocket.getOutputStream()
-                inputStream = establishedSocket.getInputStream()
+                socket = sslSocket
+                outputStream = sslSocket.getOutputStream()
+                inputStream = sslSocket.getInputStream()
                 connectedDevice = device
                 isSocketConnected = true
 
-                // Send initial configuration packet
-                sendConfigurationHandshake()
+                // Send Official Android TV Remote v2 Configuration packet
+                // RemoteMessage { remote_configure: { code1: 622, device_info: { model: "TVGrip", vendor: "TVGrip", unknown1: 1, unknown2: "1", ... } } }
+                sendRemoteConfigure()
 
+                Log.d(TAG, "Android TV Remote v2 connected successfully on ${device.name}")
                 ConnectionResult.Success(device.capabilities)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed connecting to Android TV: ${e.message}")
-                isSocketConnected = false
-                ConnectionResult.Failed("Could not establish connection to ${device.host}:${device.port}. Reason: ${e.localizedMessage ?: "Connection timed out"}")
+                Log.e(TAG, "Failed connecting to Android TV TLS port 6466: ${e.message}")
+                
+                // Fallback attempt on plain TCP (e.g. for custom companion or open daemons)
+                try {
+                    val plainSocket = Socket()
+                    plainSocket.connect(InetSocketAddress(device.host, device.port), 3000)
+                    plainSocket.tcpNoDelay = true
+                    socket = plainSocket
+                    outputStream = plainSocket.getOutputStream()
+                    inputStream = plainSocket.getInputStream()
+                    connectedDevice = device
+                    isSocketConnected = true
+                    ConnectionResult.Success(device.capabilities)
+                } catch (plainEx: Exception) {
+                    isSocketConnected = false
+                    ConnectionResult.Failed("Could not establish connection to ${device.host}:${device.port}. Error: ${e.localizedMessage ?: "Timeout"}")
+                }
             }
         }
     }
 
-    private fun sendConfigurationHandshake() {
+    /**
+     * Sends the Android TV Remote v2 Configure packet.
+     * Field 43 (remote_configure, wire_type 2):
+     *   field 1 (code1) = 622
+     *   field 2 (device_info)
+     */
+    private fun sendRemoteConfigure() {
         try {
             val stream = outputStream ?: return
-            val clientName = "TVGrip Remote"
-            val nameBytes = clientName.toByteArray(Charsets.UTF_8)
-            val configPacket = ByteArray(4 + nameBytes.size)
-            configPacket[0] = 0x00 // Handshake Header
-            configPacket[1] = (nameBytes.size + 2).toByte()
-            configPacket[2] = 0x0A // ClientInfo tag
-            configPacket[3] = nameBytes.size.toByte()
-            System.arraycopy(nameBytes, 0, configPacket, 4, nameBytes.size)
-            
-            stream.write(configPacket)
+
+            // DeviceInfo { model: "TVGrip", make: "TVGrip", app_version: "1.0.0" }
+            val info = ByteArrayOutputStream()
+            writeStringField(info, 1, "TVGrip")
+            writeStringField(info, 2, "TVGrip")
+            writeVarintField(info, 3, 1)
+            writeStringField(info, 4, "1.0.0")
+            val infoBytes = info.toByteArray()
+
+            // RemoteConfigure { code1: 622, device_info: infoBytes }
+            val conf = ByteArrayOutputStream()
+            writeVarintField(conf, 1, 622)
+            writeLengthDelimitedField(conf, 2, infoBytes)
+            val confBytes = conf.toByteArray()
+
+            // RemoteMessage { remote_configure (field 43, wire type 2 -> (43 << 3) | 2 = 0x15A -> [0xDA, 0x02]) }
+            val msg = ByteArrayOutputStream()
+            msg.write(byteArrayOf(0xDA.toByte(), 0x02)) // tag for field 43
+            writeVarint(msg, confBytes.size)
+            msg.write(confBytes)
+
+            val totalBytes = msg.toByteArray()
+            val framedPacket = ByteArrayOutputStream()
+            writeVarint(framedPacket, totalBytes.size)
+            framedPacket.write(totalBytes)
+
+            stream.write(framedPacket.toByteArray())
             stream.flush()
         } catch (e: Exception) {
-            Log.w(TAG, "Handshake send notice: ${e.message}")
+            Log.w(TAG, "Configure packet send error: ${e.message}")
         }
     }
 
@@ -118,20 +150,15 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
             try {
                 when (command) {
                     is TvCommand.KeyPress -> {
-                        sendKeyEvent(command.key.code, isDown = true)
-                        kotlinx.coroutines.delay(35)
-                        sendKeyEvent(command.key.code, isDown = false)
+                        // Direction: START (1) -> END (2) or SHORT (3)
+                        sendRemoteKeyInject(command.key.code, direction = 3) // SHORT PRESS
                     }
-                    is TvCommand.KeyDown -> sendKeyEvent(command.key.code, isDown = true)
-                    is TvCommand.KeyUp -> sendKeyEvent(command.key.code, isDown = false)
-                    is TvCommand.TextString -> sendText(command.text)
-                    is TvCommand.SendText -> sendText(command.text)
+                    is TvCommand.KeyDown -> sendRemoteKeyInject(command.key.code, direction = 1) // START / DOWN
+                    is TvCommand.KeyUp -> sendRemoteKeyInject(command.key.code, direction = 2) // END / UP
+                    is TvCommand.TextString -> sendRemoteImeText(command.text)
+                    is TvCommand.SendText -> sendRemoteImeText(command.text)
                     is TvCommand.PointerMove -> sendPointerDelta(command.deltaX, command.deltaY)
-                    is TvCommand.PointerClick -> {
-                        sendKeyEvent(TvKey.CENTER.code, isDown = true)
-                        kotlinx.coroutines.delay(if (command.isLongPress) 500L else 35L)
-                        sendKeyEvent(TvKey.CENTER.code, isDown = false)
-                    }
+                    is TvCommand.PointerClick -> sendRemoteKeyInject(TvKey.CENTER.code, direction = 3)
                     is TvCommand.PointerScroll -> sendScroll(command.scrollY)
                     is TvCommand.GamepadUpdate -> sendGamepadState(command)
                     is TvCommand.LaunchApp -> sendAppLaunch(command.packageName)
@@ -145,53 +172,71 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
         }
     }
 
-    private fun sendKeyEvent(androidKeyCode: Int, isDown: Boolean) {
+    /**
+     * Encodes and writes RemoteKeyInject inside RemoteMessage according to Android TV Remote v2 standard:
+     *
+     * RemoteMessage:
+     *   field 41 (remote_key_inject, wire_type 2): (41 << 3) | 2 = 330 = [0xCA, 0x02]
+     *     field 1 (key_code, varint): [0x08, keyCode]
+     *     field 2 (direction, varint): [0x10, direction] (1 = START, 2 = END, 3 = SHORT)
+     */
+    private fun sendRemoteKeyInject(androidKeyCode: Int, direction: Int) {
         val stream = outputStream ?: return
-        
-        // Format 1: Android TV Remote v2 standard protobuf wire format
-        // RemoteKeyInject { keyCode: varint, direction: varint }
-        val dirVal = if (isDown) 2 else 3
-        val protoKeyPacket = ByteArray(8)
-        protoKeyPacket[0] = 0x02 // RemoteKeyInject opcode / tag
-        protoKeyPacket[1] = 0x06 // Length
-        protoKeyPacket[2] = 0x08 // Field 1 (Keycode tag)
-        protoKeyPacket[3] = (androidKeyCode and 0x7F).toByte()
-        protoKeyPacket[4] = ((androidKeyCode shr 7) and 0x7F).toByte()
-        protoKeyPacket[5] = 0x10 // Field 2 (Direction tag)
-        protoKeyPacket[6] = dirVal.toByte()
-        protoKeyPacket[7] = 0x00 // End delimiter
 
-        // Format 2: Direct Binary fallback [Length, Type=0x01, KeyCode (4B), Action (1B)]
-        val binaryPacket = ByteArray(7)
-        binaryPacket[0] = 6
-        binaryPacket[1] = 0x01
-        binaryPacket[2] = (androidKeyCode shr 24).toByte()
-        binaryPacket[3] = (androidKeyCode shr 16).toByte()
-        binaryPacket[4] = (androidKeyCode shr 8).toByte()
-        binaryPacket[5] = androidKeyCode.toByte()
-        binaryPacket[6] = if (isDown) 1 else 0
+        // RemoteKeyInject payload
+        val keyPayload = ByteArrayOutputStream()
+        writeVarintField(keyPayload, 1, androidKeyCode)
+        writeVarintField(keyPayload, 2, direction)
+        val keyBytes = keyPayload.toByteArray()
 
-        stream.write(protoKeyPacket)
-        stream.write(binaryPacket)
+        // RemoteMessage with field 41 (tag: 0xCA, 0x02)
+        val msg = ByteArrayOutputStream()
+        msg.write(byteArrayOf(0xCA.toByte(), 0x02)) // Field 41, Length delimited
+        writeVarint(msg, keyBytes.size)
+        msg.write(keyBytes)
+        val totalMsg = msg.toByteArray()
+
+        // Framed with Varint Length Prefix
+        val packet = ByteArrayOutputStream()
+        writeVarint(packet, totalMsg.size)
+        packet.write(totalMsg)
+
+        stream.write(packet.toByteArray())
         stream.flush()
     }
 
-    private fun sendText(text: String) {
+    /**
+     * RemoteImeKeyInject / RemoteString payload for text entry
+     */
+    private fun sendRemoteImeText(text: String) {
         val stream = outputStream ?: return
-        val bytes = text.toByteArray(Charsets.UTF_8)
-        val buffer = ByteArray(2 + bytes.size)
-        buffer[0] = (bytes.size + 1).toByte()
-        buffer[1] = 0x02 // PacketType: Text
-        System.arraycopy(bytes, 0, buffer, 2, bytes.size)
-        stream.write(buffer)
+        val textBytes = text.toByteArray(Charsets.UTF_8)
+
+        // Field 42: RemoteImeBatchEdit { field 1: string }
+        val imePayload = ByteArrayOutputStream()
+        writeLengthDelimitedField(imePayload, 1, textBytes)
+        val imeBytes = imePayload.toByteArray()
+
+        val msg = ByteArrayOutputStream()
+        msg.write(byteArrayOf(0xD2.toByte(), 0x02)) // Field 42 (0xD2, 0x02)
+        writeVarint(msg, imeBytes.size)
+        msg.write(imeBytes)
+        val totalMsg = msg.toByteArray()
+
+        val packet = ByteArrayOutputStream()
+        writeVarint(packet, totalMsg.size)
+        packet.write(totalMsg)
+
+        stream.write(packet.toByteArray())
         stream.flush()
     }
 
     private fun sendPointerDelta(dx: Float, dy: Float) {
         val stream = outputStream ?: return
+        // Send mouse delta packet
         val buffer = ByteArray(6)
         buffer[0] = 5
-        buffer[1] = 0x03 // PacketType: Pointer Delta
+        buffer[1] = 0x03
         val clampedX = (dx * 10).toInt().coerceIn(-128, 127)
         val clampedY = (dy * 10).toInt().coerceIn(-128, 127)
         buffer[2] = clampedX.toByte()
@@ -204,7 +249,7 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
         val stream = outputStream ?: return
         val buffer = ByteArray(4)
         buffer[0] = 3
-        buffer[1] = 0x04 // PacketType: Scroll
+        buffer[1] = 0x04
         buffer[2] = (scrollY * 10).toInt().coerceIn(-128, 127).toByte()
         buffer[3] = 0
         stream.write(buffer)
@@ -216,7 +261,7 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
         val s = update.state
         val buffer = ByteArray(12)
         buffer[0] = 11
-        buffer[1] = 0x05 // PacketType: Gamepad
+        buffer[1] = 0x05
         buffer[2] = ((s.leftStickX * 127).toInt()).toByte()
         buffer[3] = ((s.leftStickY * 127).toInt()).toByte()
         buffer[4] = ((s.rightStickX * 127).toInt()).toByte()
@@ -253,19 +298,58 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
     private fun sendAppLaunch(packageName: String) {
         val stream = outputStream ?: return
         val bytes = packageName.toByteArray(Charsets.UTF_8)
-        val buffer = ByteArray(2 + bytes.size)
-        buffer[0] = (bytes.size + 1).toByte()
-        buffer[1] = 0x06 // PacketType: Launch App
-        System.arraycopy(bytes, 0, buffer, 2, bytes.size)
-        stream.write(buffer)
+        // RemoteAppLink / RemoteLaunch payload (field 44: tag 0xE2, 0x02)
+        val payload = ByteArrayOutputStream()
+        writeStringField(payload, 1, packageName)
+        val payloadBytes = payload.toByteArray()
+
+        val msg = ByteArrayOutputStream()
+        msg.write(byteArrayOf(0xE2.toByte(), 0x02))
+        writeVarint(msg, payloadBytes.size)
+        msg.write(payloadBytes)
+        val totalMsg = msg.toByteArray()
+
+        val packet = ByteArrayOutputStream()
+        writeVarint(packet, totalMsg.size)
+        packet.write(totalMsg)
+
+        stream.write(packet.toByteArray())
         stream.flush()
     }
 
     private fun sendPing() {
         val stream = outputStream ?: return
-        val buffer = byteArrayOf(1, 0x00) // PacketType: Ping
-        stream.write(buffer)
+        // RemotePing (field 1: remote_ping)
+        val packet = byteArrayOf(0x02, 0x0A, 0x00)
+        stream.write(packet)
         stream.flush()
+    }
+
+    // Helper functions for Protobuf wire encoding
+    private fun writeVarint(out: OutputStream, value: Int) {
+        var v = value
+        while (v and 0x7F.inv() != 0) {
+            out.write((v and 0x7F) or 0x80)
+            v = v ushr 7
+        }
+        out.write(v and 0x7F)
+    }
+
+    private fun writeVarintField(out: OutputStream, fieldNumber: Int, value: Int) {
+        val tag = (fieldNumber shl 3) or 0 // wire type 0: varint
+        writeVarint(out, tag)
+        writeVarint(out, value)
+    }
+
+    private fun writeLengthDelimitedField(out: OutputStream, fieldNumber: Int, data: ByteArray) {
+        val tag = (fieldNumber shl 3) or 2 // wire type 2: length delimited
+        writeVarint(out, tag)
+        writeVarint(out, data.size)
+        out.write(data)
+    }
+
+    private fun writeStringField(out: OutputStream, fieldNumber: Int, text: String) {
+        writeLengthDelimitedField(out, fieldNumber, text.toByteArray(Charsets.UTF_8))
     }
 
     override suspend fun measureLatency(): Long {
