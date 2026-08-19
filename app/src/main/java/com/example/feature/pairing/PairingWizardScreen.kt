@@ -1,6 +1,10 @@
 package com.example.feature.pairing
 
+import android.Manifest
 import android.bluetooth.BluetoothDevice
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,11 +24,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -32,12 +33,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -45,12 +43,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -61,7 +58,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.core.bluetooth.BluetoothRemoteState
-import com.example.core.model.CapabilityLevel
 import com.example.core.model.CapabilitySet
 import com.example.core.model.TvDevice
 import com.example.ui.components.DeveloperCredit
@@ -71,7 +67,6 @@ import com.example.ui.components.TopHeader
 import com.example.ui.theme.GripBlack
 import com.example.ui.theme.GripCardBorder
 import com.example.ui.theme.GripCardElevated
-import com.example.ui.theme.GripCardSurface
 import com.example.ui.theme.GripCyan
 import com.example.ui.theme.GripEmerald
 import com.example.ui.theme.GripOrangeBright
@@ -88,6 +83,35 @@ fun PairingWizardScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            viewModel.startBluetoothPairing()
+        }
+    }
+
+    fun requestBluetoothAndStart() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            bluetoothPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_ADVERTISE
+                )
+            )
+        } else {
+            bluetoothPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.BLUETOOTH,
+                    Manifest.permission.BLUETOOTH_ADMIN,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                )
+            )
+        }
+    }
 
     Box(
         modifier = modifier
@@ -116,14 +140,14 @@ fun PairingWizardScreen(
                     when (step) {
                         PairingStep.INTRO -> StepIntro(
                             onStartWiFlyScan = { viewModel.startScanning() },
-                            onStartBluetoothPairing = { viewModel.startBluetoothPairing() }
+                            onStartBluetoothPairing = { requestBluetoothAndStart() }
                         )
                         PairingStep.SCANNING -> StepScanning()
                         PairingStep.SELECT_DEVICE -> StepSelectDevice(
                             devices = state.discoveredDevices,
                             onSelectDevice = { viewModel.selectDevice(it) },
                             onRescan = { viewModel.startScanning() },
-                            onSwitchToBluetooth = { viewModel.startBluetoothPairing() },
+                            onSwitchToBluetooth = { requestBluetoothAndStart() },
                             manualIp = state.manualIp,
                             onManualIpChange = { viewModel.setManualIp(it) },
                             onSubmitManualIp = { viewModel.submitManualIp() },
@@ -134,6 +158,7 @@ fun PairingWizardScreen(
                             btState = state.bluetoothState,
                             pairedDevices = state.bluetoothPairedDevices,
                             discoveredDevices = state.bluetoothDiscoveredDevices,
+                            onRequestPermission = { requestBluetoothAndStart() },
                             onConnectBt = { viewModel.connectBluetoothDevice(it) },
                             onRescanBt = { viewModel.startBluetoothPairing() },
                             onSwitchToWifi = { 
@@ -280,6 +305,7 @@ private fun StepBluetoothPairing(
     btState: BluetoothRemoteState,
     pairedDevices: List<BluetoothDevice>,
     discoveredDevices: List<BluetoothDevice>,
+    onRequestPermission: () -> Unit,
     onConnectBt: (BluetoothDevice) -> Unit,
     onRescanBt: () -> Unit,
     onSwitchToWifi: () -> Unit
@@ -301,13 +327,44 @@ private fun StepBluetoothPairing(
         Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "Select your TV from paired or nearby Bluetooth devices to connect directly as a standard wireless remote.",
+            text = "Connect directly as a hardware Bluetooth TV remote control.",
             color = GripTextSecondary,
             fontSize = 13.sp,
             textAlign = TextAlign.Center
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        if (btState == BluetoothRemoteState.PERMISSION_REQUIRED) {
+            TactileCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Bluetooth Permission Needed",
+                        color = GripOrangeBright,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "TVGrip needs Nearby Devices (Bluetooth) permission to connect as a TV remote.",
+                        color = GripTextSecondary,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    TactileButton(
+                        onClick = onRequestPermission,
+                        text = "GRANT BLUETOOTH PERMISSION",
+                        isPrimary = true,
+                        testTag = "grant_bt_permission_btn"
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         // Paired devices
         if (pairedDevices.isNotEmpty()) {
@@ -378,12 +435,12 @@ private fun StepBluetoothPairing(
     }
 }
 
-@android.annotation.SuppressLint("MissingPermission")
 @Composable
 private fun BluetoothDeviceCard(
     device: BluetoothDevice,
     onClick: () -> Unit
 ) {
+    val devName = try { device.name ?: device.address } catch (e: SecurityException) { device.address }
     TactileCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -413,7 +470,7 @@ private fun BluetoothDeviceCard(
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = device.name ?: "Bluetooth TV",
+                    text = devName,
                     color = GripTextPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
@@ -499,9 +556,9 @@ private fun StepSelectDevice(
                             onClick = onSwitchToBluetooth,
                             modifier = Modifier.weight(1f),
                             icon = Icons.Default.Bluetooth,
-                            text = "TRY BLUETOOTH",
+                            text = "USE BLUETOOTH",
                             accentColor = GripCyan,
-                            testTag = "pairing_try_bt_button"
+                            testTag = "use_bluetooth_btn"
                         )
                     }
                 }
@@ -511,7 +568,7 @@ private fun StepSelectDevice(
                 TactileCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 4.dp),
                     onClick = { onSelectDevice(device) }
                 ) {
                     Row(
@@ -732,7 +789,7 @@ private fun StepConnecting(deviceName: String) {
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Establishing secure connection profile...",
+            text = "Establishing secure connection handshake",
             color = GripTextSecondary,
             fontSize = 13.sp
         )

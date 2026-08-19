@@ -100,7 +100,7 @@ TVGrip uses GitHub Actions (`.github/workflows/release.yml`) for seamless deploy
 
 - Automatically builds using **Java 17 (Temurin)** and **Gradle 9.3.1**.
 - Signs the APK with the debug keystore.
-- Publishes **`TVGrip.apk`** to the **GitHub Releases** page on every push to `main` or tag push (`v*`).
+- Uses `softprops/action-gh-release@v2` to publish **`TVGrip.apk`** to the **GitHub Releases** page on every push to `main` or tag push (`v*`).
 
 ---
 

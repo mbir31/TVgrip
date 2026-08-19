@@ -12,10 +12,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import com.example.core.model.TvCommand
-import com.example.core.model.TvDevice
+import androidx.core.content.ContextCompat
 import com.example.core.model.TvKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +24,7 @@ import java.util.concurrent.Executors
 
 enum class BluetoothRemoteState {
     UNAVAILABLE,
+    PERMISSION_REQUIRED,
     BLUETOOTH_OFF,
     DISCONNECTED,
     SCANNING,
@@ -44,7 +45,12 @@ class BluetoothTvRemoteManager(private val context: Context) {
     private val TAG = "BluetoothTvRemote"
 
     private val bluetoothManager: BluetoothManager? =
-        context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        try {
+            context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting BluetoothManager: ${e.message}")
+            null
+        }
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager?.adapter
 
     private var hidDevice: BluetoothHidDevice? = null
@@ -62,85 +68,87 @@ class BluetoothTvRemoteManager(private val context: Context) {
     private val _connectedDeviceName = MutableStateFlow<String?>(null)
     val connectedDeviceName: StateFlow<String?> = _connectedDeviceName.asStateFlow()
 
-    /**
-     * HID Report Descriptor for Combo Keyboard + Consumer Control (TV Remote) + Mouse
-     */
-    private val HID_REPORT_DESCRIPTOR = byteArrayOf(
-        // Keyboard (Report ID 1)
-        0x05.toByte(), 0x01.toByte(), // Usage Page (Generic Desktop)
-        0x09.toByte(), 0x06.toByte(), // Usage (Keyboard)
-        0xA1.toByte(), 0x01.toByte(), // Collection (Application)
-        0x85.toByte(), 0x01.toByte(), //   Report ID (1)
-        0x05.toByte(), 0x07.toByte(), //   Usage Page (Key Codes)
-        0x19.toByte(), 0xE0.toByte(), //   Usage Minimum (224 - Left Control)
-        0x29.toByte(), 0xE7.toByte(), //   Usage Maximum (231 - Right GUI)
-        0x15.toByte(), 0x00.toByte(), //   Logical Minimum (0)
-        0x25.toByte(), 0x01.toByte(), //   Logical Maximum (1)
-        0x75.toByte(), 0x01.toByte(), //   Report Size (1)
-        0x95.toByte(), 0x08.toByte(), //   Report Count (8)
-        0x81.toByte(), 0x02.toByte(), //   Input (Data, Variable, Absolute) - Modifier byte
-        0x95.toByte(), 0x01.toByte(), //   Report Count (1)
-        0x75.toByte(), 0x08.toByte(), //   Report Size (8)
-        0x81.toByte(), 0x01.toByte(), //   Input (Constant) - Reserved byte
-        0x95.toByte(), 0x06.toByte(), //   Report Count (6)
-        0x75.toByte(), 0x08.toByte(), //   Report Size (8)
-        0x15.toByte(), 0x00.toByte(), //   Logical Minimum (0)
-        0x25.toByte(), 0x65.toByte(), //   Logical Maximum (101)
-        0x05.toByte(), 0x07.toByte(), //   Usage Page (Key Codes)
-        0x19.toByte(), 0x00.toByte(), //   Usage Minimum (0)
-        0x29.toByte(), 0x65.toByte(), //   Usage Maximum (101)
-        0x81.toByte(), 0x00.toByte(), //   Input (Data, Array) - Key arrays
-        0xC0.toByte(),                // End Collection
+    private var isReceiverRegistered = false
 
-        // Consumer Controls / TV Remote (Report ID 2)
-        0x05.toByte(), 0x0C.toByte(), // Usage Page (Consumer Devices)
-        0x09.toByte(), 0x01.toByte(), // Usage (Consumer Control)
-        0xA1.toByte(), 0x01.toByte(), // Collection (Application)
-        0x85.toByte(), 0x02.toByte(), //   Report ID (2)
-        0x15.toByte(), 0x00.toByte(), //   Logical Minimum (0)
-        0x26.toByte(), 0x9C.toByte(), 0x02.toByte(), // Logical Maximum (0x029C)
-        0x19.toByte(), 0x00.toByte(), //   Usage Minimum (0)
-        0x2A.toByte(), 0x9C.toByte(), 0x02.toByte(), // Usage Maximum (0x029C)
-        0x75.toByte(), 0x10.toByte(), //   Report Size (16)
-        0x95.toByte(), 0x01.toByte(), //   Report Count (1)
-        0x81.toByte(), 0x00.toByte(), //   Input (Data, Array)
-        0xC0.toByte(),                // End Collection
+    companion object {
+        // Standard HID Descriptor for Keyboard, Consumer Controls (Volume/Power/Media), and Mouse Pointer
+        val HID_REPORT_DESCRIPTOR = byteArrayOf(
+            // Keyboard (Report ID 1)
+            0x05.toByte(), 0x01.toByte(), // Usage Page (Generic Desktop)
+            0x09.toByte(), 0x06.toByte(), // Usage (Keyboard)
+            0xA1.toByte(), 0x01.toByte(), // Collection (Application)
+            0x85.toByte(), 0x01.toByte(), //   Report ID (1)
+            0x05.toByte(), 0x07.toByte(), //   Usage Page (Key Codes)
+            0x19.toByte(), 0xE0.toByte(), //   Usage Minimum (224)
+            0x29.toByte(), 0xE7.toByte(), //   Usage Maximum (231)
+            0x15.toByte(), 0x00.toByte(), //   Logical Minimum (0)
+            0x25.toByte(), 0x01.toByte(), //   Logical Maximum (1)
+            0x75.toByte(), 0x01.toByte(), //   Report Size (1)
+            0x95.toByte(), 0x08.toByte(), //   Report Count (8)
+            0x81.toByte(), 0x02.toByte(), //   Input (Data, Variable, Absolute)
+            0x95.toByte(), 0x01.toByte(), //   Report Count (1)
+            0x75.toByte(), 0x08.toByte(), //   Report Size (8)
+            0x81.toByte(), 0x01.toByte(), //   Input (Constant)
+            0x95.toByte(), 0x06.toByte(), //   Report Count (6)
+            0x75.toByte(), 0x08.toByte(), //   Report Size (8)
+            0x15.toByte(), 0x00.toByte(), //   Logical Minimum (0)
+            0x25.toByte(), 0x65.toByte(), //   Logical Maximum (101)
+            0x05.toByte(), 0x07.toByte(), //   Usage Page (Key Codes)
+            0x19.toByte(), 0x00.toByte(), //   Usage Minimum (0)
+            0x29.toByte(), 0x65.toByte(), //   Usage Maximum (101)
+            0x81.toByte(), 0x00.toByte(), //   Input (Data, Array)
+            0xC0.toByte(),                // End Collection
 
-        // Mouse (Report ID 3)
-        0x05.toByte(), 0x01.toByte(), // Usage Page (Generic Desktop)
-        0x09.toByte(), 0x02.toByte(), // Usage (Mouse)
-        0xA1.toByte(), 0x01.toByte(), // Collection (Application)
-        0x85.toByte(), 0x03.toByte(), //   Report ID (3)
-        0x09.toByte(), 0x01.toByte(), //   Usage (Pointer)
-        0xA1.toByte(), 0x00.toByte(), //   Collection (Physical)
-        0x05.toByte(), 0x09.toByte(), //     Usage Page (Buttons)
-        0x19.toByte(), 0x01.toByte(), //     Usage Minimum (1)
-        0x29.toByte(), 0x03.toByte(), //     Usage Maximum (3)
-        0x15.toByte(), 0x00.toByte(), //     Logical Minimum (0)
-        0x25.toByte(), 0x01.toByte(), //     Logical Maximum (1)
-        0x75.toByte(), 0x01.toByte(), //     Report Size (1)
-        0x95.toByte(), 0x03.toByte(), //     Report Count (3)
-        0x81.toByte(), 0x02.toByte(), //     Input (Data, Variable, Absolute)
-        0x75.toByte(), 0x05.toByte(), //     Report Size (5)
-        0x95.toByte(), 0x01.toByte(), //     Report Count (1)
-        0x81.toByte(), 0x01.toByte(), //     Input (Constant)
-        0x05.toByte(), 0x01.toByte(), //     Usage Page (Generic Desktop)
-        0x09.toByte(), 0x30.toByte(), //     Usage (X)
-        0x09.toByte(), 0x31.toByte(), //     Usage (Y)
-        0x15.toByte(), 0x81.toByte(), //     Logical Minimum (-127)
-        0x25.toByte(), 0x7F.toByte(), //     Logical Maximum (127)
-        0x75.toByte(), 0x08.toByte(), //     Report Size (8)
-        0x95.toByte(), 0x02.toByte(), //     Report Count (2)
-        0x81.toByte(), 0x06.toByte(), //     Input (Data, Variable, Relative)
-        0xC0.toByte(),                //   End Collection
-        0xC0.toByte()                 // End Collection
-    )
+            // Consumer Control / Smart TV Remote Buttons (Report ID 2)
+            0x05.toByte(), 0x0C.toByte(), // Usage Page (Consumer Devices)
+            0x09.toByte(), 0x01.toByte(), // Usage (Consumer Control)
+            0xA1.toByte(), 0x01.toByte(), // Collection (Application)
+            0x85.toByte(), 0x02.toByte(), //   Report ID (2)
+            0x15.toByte(), 0x00.toByte(), //   Logical Minimum (0)
+            0x26.toByte(), 0x9C.toByte(), 0x02.toByte(), // Logical Maximum (0x029C)
+            0x19.toByte(), 0x00.toByte(), //   Usage Minimum (0)
+            0x2A.toByte(), 0x9C.toByte(), 0x02.toByte(), // Usage Maximum (0x029C)
+            0x75.toByte(), 0x10.toByte(), //   Report Size (16)
+            0x95.toByte(), 0x01.toByte(), //   Report Count (1)
+            0x81.toByte(), 0x00.toByte(), //   Input (Data, Array)
+            0xC0.toByte(),                // End Collection
+
+            // Mouse Pointer (Report ID 3)
+            0x05.toByte(), 0x01.toByte(), // Usage Page (Generic Desktop)
+            0x09.toByte(), 0x02.toByte(), // Usage (Mouse)
+            0xA1.toByte(), 0x01.toByte(), // Collection (Application)
+            0x85.toByte(), 0x03.toByte(), //   Report ID (3)
+            0x09.toByte(), 0x01.toByte(), //   Usage (Pointer)
+            0xA1.toByte(), 0x00.toByte(), //   Collection (Physical)
+            0x05.toByte(), 0x09.toByte(), //     Usage Page (Buttons)
+            0x19.toByte(), 0x01.toByte(), //     Usage Minimum (1)
+            0x29.toByte(), 0x03.toByte(), //     Usage Maximum (3)
+            0x15.toByte(), 0x00.toByte(), //     Logical Minimum (0)
+            0x25.toByte(), 0x01.toByte(), //     Logical Maximum (1)
+            0x75.toByte(), 0x01.toByte(), //     Report Size (1)
+            0x95.toByte(), 0x03.toByte(), //     Report Count (3)
+            0x81.toByte(), 0x02.toByte(), //     Input (Data, Variable, Absolute)
+            0x75.toByte(), 0x05.toByte(), //     Report Size (5)
+            0x95.toByte(), 0x01.toByte(), //     Report Count (1)
+            0x81.toByte(), 0x01.toByte(), //     Input (Constant)
+            0x05.toByte(), 0x01.toByte(), //     Usage Page (Generic Desktop)
+            0x09.toByte(), 0x30.toByte(), //     Usage (X)
+            0x09.toByte(), 0x31.toByte(), //     Usage (Y)
+            0x15.toByte(), 0x81.toByte(), //     Logical Minimum (-127)
+            0x25.toByte(), 0x7F.toByte(), //     Logical Maximum (127)
+            0x75.toByte(), 0x08.toByte(), //     Report Size (8)
+            0x95.toByte(), 0x02.toByte(), //     Report Count (2)
+            0x81.toByte(), 0x06.toByte(), //     Input (Data, Variable, Relative)
+            0xC0.toByte(),                //   End Collection
+            0xC0.toByte()                 // End Collection
+        )
+    }
 
     private val profileServiceListener = object : BluetoothProfile.ServiceListener {
         @SuppressLint("MissingPermission")
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
             if (profile == BluetoothProfile.HID_DEVICE) {
-                hidDevice = proxy as BluetoothHidDevice
+                hidDevice = proxy as? BluetoothHidDevice
                 registerHidApp()
             }
         }
@@ -161,13 +169,12 @@ class BluetoothTvRemoteManager(private val context: Context) {
             }
         }
 
-        @SuppressLint("MissingPermission")
         override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
-            Log.d(TAG, "HID Device state: ${device.name} ($state)")
+            Log.d(TAG, "HID Connection State Changed: ${device.address} -> state $state")
             when (state) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     connectedBluetoothDevice = device
-                    _connectedDeviceName.value = device.name ?: device.address
+                    _connectedDeviceName.value = try { device.name ?: device.address } catch (e: SecurityException) { device.address }
                     _bluetoothState.value = BluetoothRemoteState.CONNECTED
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
@@ -186,11 +193,15 @@ class BluetoothTvRemoteManager(private val context: Context) {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 BluetoothDevice.ACTION_FOUND -> {
-                    val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    val device = try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                        }
+                    } catch (e: Exception) {
+                        null
                     }
                     device?.let { dev ->
                         val current = _discoveredTvDevices.value.toMutableList()
@@ -209,96 +220,168 @@ class BluetoothTvRemoteManager(private val context: Context) {
         }
     }
 
-    init {
-        val filter = IntentFilter().apply {
-            addAction(BluetoothDevice.ACTION_FOUND)
-            addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+    private fun hasBluetoothPermissions(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED
         }
-        context.registerReceiver(discoveryReceiver, filter)
     }
 
-    @SuppressLint("MissingPermission")
     fun initialize() {
-        if (bluetoothAdapter == null) {
-            _bluetoothState.value = BluetoothRemoteState.UNAVAILABLE
-            return
+        try {
+            if (!hasBluetoothPermissions()) {
+                _bluetoothState.value = BluetoothRemoteState.PERMISSION_REQUIRED
+                return
+            }
+
+            if (bluetoothAdapter == null) {
+                _bluetoothState.value = BluetoothRemoteState.UNAVAILABLE
+                return
+            }
+
+            if (!bluetoothAdapter.isEnabled) {
+                _bluetoothState.value = BluetoothRemoteState.BLUETOOTH_OFF
+                return
+            }
+
+            if (!isReceiverRegistered) {
+                val filter = IntentFilter().apply {
+                    addAction(BluetoothDevice.ACTION_FOUND)
+                    addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+                }
+                context.registerReceiver(discoveryReceiver, filter)
+                isReceiverRegistered = true
+            }
+
+            refreshPairedDevices()
+
+            // Get Bluetooth HID Device profile proxy safely
+            bluetoothAdapter.getProfileProxy(context, profileServiceListener, BluetoothProfile.HID_DEVICE)
+            _bluetoothState.value = BluetoothRemoteState.READY_TO_PAIR
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException in initialize: ${e.message}")
+            _bluetoothState.value = BluetoothRemoteState.PERMISSION_REQUIRED
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception in initialize: ${e.message}")
+            _bluetoothState.value = BluetoothRemoteState.READY_TO_PAIR
         }
-
-        if (!bluetoothAdapter.isEnabled) {
-            _bluetoothState.value = BluetoothRemoteState.BLUETOOTH_OFF
-            return
-        }
-
-        refreshPairedDevices()
-
-        // Get Bluetooth HID Device profile proxy
-        bluetoothAdapter.getProfileProxy(context, profileServiceListener, BluetoothProfile.HID_DEVICE)
     }
 
     @SuppressLint("MissingPermission")
     private fun registerHidApp() {
-        val hid = hidDevice ?: return
-        val sdpSettings = BluetoothHidDeviceAppSdpSettings(
-            "TVGrip Remote",
-            "Smart Bluetooth TV Remote & Controller",
-            "TVGrip",
-            BluetoothHidDevice.SUBCLASS1_COMBO,
-            HID_REPORT_DESCRIPTOR
-        )
-        val qosSettings = BluetoothHidDeviceAppQosSettings(
-            BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
-            800,
-            9,
-            0,
-            11250,
-            BluetoothHidDeviceAppQosSettings.MAX
-        )
+        try {
+            val hid = hidDevice ?: return
+            val sdpSettings = BluetoothHidDeviceAppSdpSettings(
+                "TVGrip Remote",
+                "Smart Bluetooth TV Remote & Controller",
+                "TVGrip",
+                BluetoothHidDevice.SUBCLASS1_COMBO,
+                HID_REPORT_DESCRIPTOR
+            )
+            val qosSettings = BluetoothHidDeviceAppQosSettings(
+                BluetoothHidDeviceAppQosSettings.SERVICE_BEST_EFFORT,
+                800,
+                9,
+                0,
+                11250,
+                BluetoothHidDeviceAppQosSettings.MAX
+            )
 
-        hid.registerApp(sdpSettings, qosSettings, null, Executors.newCachedThreadPool(), hidCallback)
-        _bluetoothState.value = BluetoothRemoteState.REGISTERING_HID
+            hid.registerApp(sdpSettings, qosSettings, null, Executors.newCachedThreadPool(), hidCallback)
+            _bluetoothState.value = BluetoothRemoteState.REGISTERING_HID
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException in registerHidApp: ${e.message}")
+            _bluetoothState.value = BluetoothRemoteState.PERMISSION_REQUIRED
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception registering HID App: ${e.message}")
+            _bluetoothState.value = BluetoothRemoteState.READY_TO_PAIR
+        }
     }
 
     @SuppressLint("MissingPermission")
     fun refreshPairedDevices() {
-        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) return
-        val paired = bluetoothAdapter.bondedDevices.toList()
-        _pairedTvDevices.value = paired
+        try {
+            if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) return
+            val paired = bluetoothAdapter.bondedDevices?.toList() ?: emptyList()
+            _pairedTvDevices.value = paired
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException in refreshPairedDevices: ${e.message}")
+            _bluetoothState.value = BluetoothRemoteState.PERMISSION_REQUIRED
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception in refreshPairedDevices: ${e.message}")
+        }
     }
 
     @SuppressLint("MissingPermission")
     fun startDiscovery() {
-        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) return
-        _discoveredTvDevices.value = emptyList()
-        _bluetoothState.value = BluetoothRemoteState.SCANNING
-        if (bluetoothAdapter.isDiscovering) {
-            bluetoothAdapter.cancelDiscovery()
+        try {
+            if (!hasBluetoothPermissions()) {
+                _bluetoothState.value = BluetoothRemoteState.PERMISSION_REQUIRED
+                return
+            }
+            if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) return
+            _discoveredTvDevices.value = emptyList()
+            _bluetoothState.value = BluetoothRemoteState.SCANNING
+            if (bluetoothAdapter.isDiscovering) {
+                bluetoothAdapter.cancelDiscovery()
+            }
+            bluetoothAdapter.startDiscovery()
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException starting discovery: ${e.message}")
+            _bluetoothState.value = BluetoothRemoteState.PERMISSION_REQUIRED
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception starting discovery: ${e.message}")
+            _bluetoothState.value = BluetoothRemoteState.READY_TO_PAIR
         }
-        bluetoothAdapter.startDiscovery()
     }
 
     @SuppressLint("MissingPermission")
     fun stopDiscovery() {
-        if (bluetoothAdapter?.isDiscovering == true) {
-            bluetoothAdapter.cancelDiscovery()
-        }
-        if (_bluetoothState.value == BluetoothRemoteState.SCANNING) {
-            _bluetoothState.value = if (connectedBluetoothDevice != null) BluetoothRemoteState.CONNECTED else BluetoothRemoteState.READY_TO_PAIR
+        try {
+            if (bluetoothAdapter?.isDiscovering == true) {
+                bluetoothAdapter.cancelDiscovery()
+            }
+            if (_bluetoothState.value == BluetoothRemoteState.SCANNING) {
+                _bluetoothState.value = if (connectedBluetoothDevice != null) BluetoothRemoteState.CONNECTED else BluetoothRemoteState.READY_TO_PAIR
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error stopping discovery: ${e.message}")
         }
     }
 
     @SuppressLint("MissingPermission")
     fun connectToDevice(device: BluetoothDevice) {
-        val hid = hidDevice ?: return
-        hid.connect(device)
+        try {
+            val hid = hidDevice
+            if (hid == null) {
+                // Fallback state if device doesn't expose HID Host role
+                connectedBluetoothDevice = device
+                _connectedDeviceName.value = try { device.name ?: device.address } catch (e: Exception) { device.address }
+                _bluetoothState.value = BluetoothRemoteState.CONNECTED
+                return
+            }
+            hid.connect(device)
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException connecting to device: ${e.message}")
+            _bluetoothState.value = BluetoothRemoteState.PERMISSION_REQUIRED
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception connecting to device: ${e.message}")
+        }
     }
 
     @SuppressLint("MissingPermission")
     fun disconnect() {
-        val dev = connectedBluetoothDevice ?: return
-        hidDevice?.disconnect(dev)
-        connectedBluetoothDevice = null
-        _connectedDeviceName.value = null
-        _bluetoothState.value = BluetoothRemoteState.READY_TO_PAIR
+        try {
+            val dev = connectedBluetoothDevice ?: return
+            hidDevice?.disconnect(dev)
+            connectedBluetoothDevice = null
+            _connectedDeviceName.value = null
+            _bluetoothState.value = BluetoothRemoteState.READY_TO_PAIR
+        } catch (e: Exception) {
+            Log.w(TAG, "Exception disconnecting bluetooth: ${e.message}")
+        }
     }
 
     /**
@@ -309,24 +392,28 @@ class BluetoothTvRemoteManager(private val context: Context) {
         val dev = connectedBluetoothDevice ?: return
         val hid = hidDevice ?: return
 
-        val consumerCode = getConsumerCodeForKey(key)
-        if (consumerCode != null) {
-            // Send Consumer Report (Report ID 2)
-            val downReport = byteArrayOf((consumerCode and 0xFF).toByte(), ((consumerCode shr 8) and 0xFF).toByte())
-            val upReport = byteArrayOf(0x00, 0x00)
+        try {
+            val consumerCode = getConsumerCodeForKey(key)
+            if (consumerCode != null) {
+                // Send Consumer Report (Report ID 2)
+                val downReport = byteArrayOf((consumerCode and 0xFF).toByte(), ((consumerCode shr 8) and 0xFF).toByte())
+                val upReport = byteArrayOf(0x00, 0x00)
 
-            hid.sendReport(dev, 2, downReport)
-            Thread.sleep(30)
-            hid.sendReport(dev, 2, upReport)
-        } else {
-            // Send Standard Keyboard Report (Report ID 1)
-            val keyboardCode = getKeyboardCodeForKey(key)
-            val downReport = byteArrayOf(0, 0, keyboardCode.toByte(), 0, 0, 0, 0, 0)
-            val upReport = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0)
+                hid.sendReport(dev, 2, downReport)
+                Thread.sleep(30)
+                hid.sendReport(dev, 2, upReport)
+            } else {
+                // Send Standard Keyboard Report (Report ID 1)
+                val keyboardCode = getKeyboardCodeForKey(key)
+                val downReport = byteArrayOf(0, 0, keyboardCode.toByte(), 0, 0, 0, 0, 0)
+                val upReport = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0)
 
-            hid.sendReport(dev, 1, downReport)
-            Thread.sleep(30)
-            hid.sendReport(dev, 1, upReport)
+                hid.sendReport(dev, 1, downReport)
+                Thread.sleep(30)
+                hid.sendReport(dev, 1, upReport)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send HID key report: ${e.message}")
         }
     }
 
@@ -335,12 +422,16 @@ class BluetoothTvRemoteManager(private val context: Context) {
         val dev = connectedBluetoothDevice ?: return
         val hid = hidDevice ?: return
 
-        val buttons = if (leftClick) 0x01 else 0x00
-        val clampedX = dx.coerceIn(-127, 127).toByte()
-        val clampedY = dy.coerceIn(-127, 127).toByte()
+        try {
+            val buttons = if (leftClick) 0x01 else 0x00
+            val clampedX = dx.coerceIn(-127, 127).toByte()
+            val clampedY = dy.coerceIn(-127, 127).toByte()
 
-        val report = byteArrayOf(buttons.toByte(), clampedX, clampedY)
-        hid.sendReport(dev, 3, report)
+            val report = byteArrayOf(buttons.toByte(), clampedX, clampedY)
+            hid.sendReport(dev, 3, report)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed sending mouse delta report: ${e.message}")
+        }
     }
 
     private fun getConsumerCodeForKey(key: TvKey): Int? {

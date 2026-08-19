@@ -10,5 +10,5 @@ Whenever the user makes any request or submits changes in the chat, immediately 
    - Keep `README.md` completely up-to-date with all newly added features, pairing instructions, Bluetooth capabilities, architecture diagrams, and release badges.
 
 3. **Clean GitHub Actions Workflow Maintenance**:
-   - Ensure old/redundant GitHub workflow files under `.github/workflows/` are removed.
-   - Maintain a single, updated, battle-tested `.github/workflows/release.yml` that automatically builds, signs, and publishes the installable `TVGrip.apk` into the repository's GitHub Releases tab upon every git push to `main` without manual intervention.
+   - Ensure all old/redundant GitHub workflow files under `.github/workflows/` are removed.
+   - Maintain a single, updated, battle-tested `.github/workflows/release.yml` using `softprops/action-gh-release@v2` that automatically builds, signs, and publishes the installable `TVGrip.apk` into the repository's GitHub Releases tab upon every git push to `main` without manual intervention.
