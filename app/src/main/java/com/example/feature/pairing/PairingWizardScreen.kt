@@ -689,6 +689,26 @@ private fun StepPairingCode(
             text = "CONFIRM & CONNECT",
             testTag = "submit_pairing_code"
         )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        TactileCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Text(
+                    text = "💡 Don't see a code on TV?",
+                    color = GripCyan,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "1. Ensure 'Android TV Remote Service' is enabled under TV Settings > Apps.\n2. Or connect via Bluetooth Mode directly (no code prompt needed).",
+                    color = GripTextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            }
+        }
     }
 }
 

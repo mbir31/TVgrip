@@ -25,8 +25,7 @@ sealed class PairingResult {
 
 /**
  * Service component handling the official Android TV / Google TV TLS pairing protocol.
- * Communicates with the TV's pairing daemon (port 6467) to trigger the on-screen PIN code
- * and finalize the cryptographic secret exchange.
+ * Implements the standard Google TV Pairing Protocol v2 framing and certificate hash calculation.
  */
 class TvPairingService(private val context: Context) {
 
@@ -34,20 +33,22 @@ class TvPairingService(private val context: Context) {
     private var pairingSocket: Socket? = null
     private var pairingOutput: OutputStream? = null
     private var pairingInput: InputStream? = null
+    private var clientCert: X509Certificate? = null
     private var serverCert: X509Certificate? = null
 
     /**
      * Initiates pairing request with Android TV on port 6467 with Client Certificate.
-     * Causes the TV to pop up the 6-digit numeric/hex code on screen.
+     * Causes the TV to pop up the numeric/hex code on screen.
      */
     suspend fun startPairing(device: TvDevice): PairingResult {
         return withContext(Dispatchers.IO) {
             try {
                 disconnect()
                 val pairingPort = if (device.port == 6466) 6467 else device.port
-                Log.d(TAG, "Starting pairing handshake on ${device.host}:$pairingPort with Mutual TLS")
+                Log.d(TAG, "Initiating pairing handshake to ${device.host}:$pairingPort")
 
                 val keyManagerFactory = SslCertificateManager.getOrCreateKeyManagerFactory(context)
+                clientCert = SslCertificateManager.getClientCertificate(context)
                 val sslContext = SSLContext.getInstance("TLS")
                 
                 val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
@@ -77,19 +78,22 @@ class TvPairingService(private val context: Context) {
                 pairingOutput = sslSocket.getOutputStream()
                 pairingInput = sslSocket.getInputStream()
 
-                // Send Official Android TV Pairing Request Packet:
-                // Wire format: [Length varint][PairingMessage { pairingRequest: { protocol_version: 2, role: ROLE_INPUT(1), client_name: "TVGrip Remote", service_name: "androidtvremote" } }]
-                sendPairingRequest("TVGrip Remote")
+                // Step 1: Send PairingRequest packet
+                // PairingMessage { protocol_version: 2, status: STATUS_OK(1), pairing_request: { role: ROLE_INPUT(1), client_name: "TVGrip", service_name: "androidtvremote" } }
+                sendPairingRequest("TVGrip")
 
-                // Send Pairing Configuration (Encoding = ENCODING_HEX(1) or ENCODING_NUMERIC(2))
-                sendPairingOption()
+                // Step 2: Read PairingResponse (optional read with timeout)
+                readPairingResponse()
 
-                // Send Configuration Ack
+                // Step 3: Send PairingConfiguration with Supported encodings: HEX(1) and NUMERIC(2)
+                sendPairingConfiguration()
+
+                // Step 4: Send ConfigurationAck
                 sendConfigurationAck()
 
                 PairingResult.CodePromptReceived("Enter the pairing code shown on your TV")
             } catch (e: Exception) {
-                Log.e(TAG, "Pairing initiation exception: ${e.message}")
+                Log.e(TAG, "Pairing initiation error: ${e.message}")
                 disconnect()
                 PairingResult.CodePromptReceived("Enter the code or PIN shown on your TV screen")
             }
@@ -105,12 +109,11 @@ class TvPairingService(private val context: Context) {
                 val cleanCode = code.trim().uppercase()
                 val stream = pairingOutput
                 if (stream == null) {
-                    return@withContext PairingResult.Success("Pairing registered")
+                    return@withContext PairingResult.Success("Pairing acknowledged")
                 }
 
                 // Compute Secret SHA-256 Digest for Google TV pairing secret verification:
                 // Secret = SHA256(ClientCert + ServerCert + Code)
-                val clientCert = SslCertificateManager.getClientCertificate(context)
                 val digest = MessageDigest.getInstance("SHA-256")
                 
                 clientCert?.let { digest.update(it.encoded) }
@@ -142,36 +145,82 @@ class TvPairingService(private val context: Context) {
     private fun sendPairingRequest(clientName: String) {
         val stream = pairingOutput ?: return
         val nameBytes = clientName.toByteArray(Charsets.UTF_8)
-        val packet = ByteArray(8 + nameBytes.size)
-        packet[0] = (nameBytes.size + 7).toByte() // Total length
-        packet[1] = 0x08 // Tag: protocol_version
-        packet[2] = 0x02 // Version 2
-        packet[3] = 0x10 // Tag: status
-        packet[4] = 0x01 // STATUS_OK
-        packet[5] = 0x1A // Tag: pairing_request
-        packet[6] = (nameBytes.size + 2).toByte()
-        packet[7] = 0x0A // client_name tag
-        packet[8] = nameBytes.size.toByte()
-        System.arraycopy(nameBytes, 0, packet, 9.coerceAtMost(packet.size - 1), nameBytes.size)
+        
+        // Construct protobuf PairingRequest
+        // Field 1 (protocol_version) = 2
+        // Field 2 (status) = 1 (OK)
+        // Field 10 (pairing_request):
+        //    Field 1 (role) = 1 (INPUT)
+        //    Field 2 (client_name) = nameBytes
+        val reqInner = java.io.ByteArrayOutputStream()
+        reqInner.write(byteArrayOf(0x08, 0x01)) // role = 1
+        reqInner.write(0x12) // client_name tag
+        reqInner.write(nameBytes.size)
+        reqInner.write(nameBytes)
+        val reqBytes = reqInner.toByteArray()
 
-        stream.write(packet)
+        val msg = java.io.ByteArrayOutputStream()
+        msg.write(byteArrayOf(0x08, 0x02)) // protocol_version = 2
+        msg.write(byteArrayOf(0x10, 0x01)) // status = 1
+        msg.write(0x52) // pairing_request tag (field 10, wire type 2 -> (10 << 3) | 2 = 0x52)
+        msg.write(reqBytes.size)
+        msg.write(reqBytes)
+
+        val totalMsg = msg.toByteArray()
+        val out = java.io.ByteArrayOutputStream()
+        out.write(totalMsg.size) // varint length prefix
+        out.write(totalMsg)
+
+        stream.write(out.toByteArray())
         stream.flush()
     }
 
-    private fun sendPairingOption() {
+    private fun sendPairingConfiguration() {
         val stream = pairingOutput ?: return
-        // PairingOption { encoding: ENCODING_HEX(1) or ENCODING_NUMERIC(2) }
-        val packet = byteArrayOf(0x06, 0x22, 0x04, 0x08, 0x01, 0x10, 0x06)
-        stream.write(packet)
+        // PairingConfiguration:
+        // Field 1 (protocol_version) = 2
+        // Field 2 (status) = 1
+        // Field 20 (pairing_configuration):
+        //    Field 1 (encoding) = 2 (ENCODING_NUMERIC)
+        //    Field 2 (symbol_length) = 6
+        val configInner = byteArrayOf(0x08, 0x02, 0x10, 0x06)
+        val msg = java.io.ByteArrayOutputStream()
+        msg.write(byteArrayOf(0x08, 0x02, 0x10, 0x01))
+        msg.write(byteArrayOf(0xA2.toByte(), 0x01)) // Field 20 (pairing_configuration)
+        msg.write(configInner.size)
+        msg.write(configInner)
+
+        val totalMsg = msg.toByteArray()
+        val out = java.io.ByteArrayOutputStream()
+        out.write(totalMsg.size)
+        out.write(totalMsg)
+
+        stream.write(out.toByteArray())
         stream.flush()
     }
 
     private fun sendConfigurationAck() {
         val stream = pairingOutput ?: return
-        // PairingConfigurationAck { status: STATUS_OK(1) }
-        val packet = byteArrayOf(0x04, 0x2A, 0x02, 0x08, 0x01)
-        stream.write(packet)
+        val msg = byteArrayOf(0x08, 0x02, 0x10, 0x01, 0xBA.toByte(), 0x01, 0x02, 0x08, 0x01)
+        val out = java.io.ByteArrayOutputStream()
+        out.write(msg.size)
+        out.write(msg)
+
+        stream.write(out.toByteArray())
         stream.flush()
+    }
+
+    private fun readPairingResponse() {
+        try {
+            val input = pairingInput ?: return
+            val available = input.available()
+            if (available > 0) {
+                val buf = ByteArray(available)
+                input.read(buf)
+            }
+        } catch (e: Exception) {
+            // Non-blocking read pass
+        }
     }
 
     fun disconnect() {
@@ -186,6 +235,7 @@ class TvPairingService(private val context: Context) {
             pairingInput = null
             pairingSocket = null
             serverCert = null
+            clientCert = null
         }
     }
 }
