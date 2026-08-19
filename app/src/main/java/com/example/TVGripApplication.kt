@@ -1,6 +1,7 @@
 package com.example
 
 import android.app.Application
+import com.example.core.bluetooth.BluetoothTvRemoteManager
 import com.example.core.data.local.TVGripDatabase
 import com.example.core.data.repository.ControllerProfileRepository
 import com.example.core.data.repository.SettingsRepository
@@ -34,6 +35,9 @@ class TVGripApplication : Application() {
     lateinit var discoveryManager: TvDiscoveryManager
         private set
 
+    lateinit var bluetoothTvRemoteManager: BluetoothTvRemoteManager
+        private set
+
     lateinit var networkMonitor: NetworkMonitor
         private set
 
@@ -63,6 +67,7 @@ class TVGripApplication : Application() {
 
         connectionManager = TvConnectionManager.getInstance()
         discoveryManager = TvDiscoveryManager(this)
+        bluetoothTvRemoteManager = BluetoothTvRemoteManager(this)
         networkMonitor = NetworkMonitor(this)
         hapticFeedbackHelper = HapticFeedbackHelper(this)
         multiplayerLobbyManager = MultiplayerLobbyManager(this, hapticFeedbackHelper)
@@ -74,7 +79,6 @@ class TVGripApplication : Application() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if (level >= TRIM_MEMORY_MODERATE) {
-            // Actively trim non-critical memory caches for Android Q+ compliance
             multiplayerLobbyManager.cleanupInactivePeers()
         }
     }

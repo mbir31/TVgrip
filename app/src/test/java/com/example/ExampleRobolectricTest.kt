@@ -2,9 +2,15 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.core.bluetooth.BluetoothTvRemoteManager
 import com.example.core.model.PlayerSlot
+import com.example.core.model.TvDevice
+import com.example.core.model.TvKey
+import com.example.core.network.SslCertificateManager
+import com.example.core.network.TvPairingService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -28,5 +34,20 @@ class ExampleRobolectricTest {
     assertEquals("P2", PlayerSlot.PLAYER_2.label)
     assertEquals("P3", PlayerSlot.PLAYER_3.label)
     assertEquals("P4", PlayerSlot.PLAYER_4.label)
+  }
+
+  @Test
+  fun `verify ssl certificate manager generates client x509 cert`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val cert = SslCertificateManager.getClientCertificate(context)
+    assertNotNull("Client X.509 certificate must be generated for mutual TLS pairing", cert)
+    assertEquals("X.509", cert?.type)
+  }
+
+  @Test
+  fun `verify bluetooth tv remote manager initial state`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val btManager = BluetoothTvRemoteManager(context)
+    assertNotNull(btManager)
   }
 }

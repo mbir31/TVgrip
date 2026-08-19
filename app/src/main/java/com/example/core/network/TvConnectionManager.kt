@@ -1,6 +1,7 @@
 package com.example.core.network
 
 import android.util.Log
+import com.example.TVGripApplication
 import com.example.core.model.CapabilityLevel
 import com.example.core.model.CapabilitySet
 import com.example.core.model.DeviceConnectionState
@@ -100,6 +101,21 @@ class TvConnectionManager {
     }
 
     fun sendCommand(command: TvCommand) {
+        // Check Bluetooth HID connection fallback
+        val btManager = runCatching { TVGripApplication.instance.bluetoothTvRemoteManager }.getOrNull()
+        if (btManager != null && btManager.isConnected()) {
+            when (command) {
+                is TvCommand.KeyPress -> btManager.sendTvKey(command.key)
+                is TvCommand.KeyDown -> btManager.sendTvKey(command.key)
+                is TvCommand.KeyUp -> {}
+                is TvCommand.PointerMove -> btManager.sendMouseDelta(command.deltaX.toInt(), command.deltaY.toInt(), leftClick = false)
+                is TvCommand.PointerClick -> btManager.sendTvKey(com.example.core.model.TvKey.CENTER)
+                else -> {}
+            }
+            _packetCountSent.update { it + 1 }
+            return
+        }
+
         val protocol = activeProtocol
         if (protocol == null || !protocol.isConnected()) {
             return
@@ -145,21 +161,24 @@ class TvConnectionManager {
         pingJob = null
     }
 
-    fun logInfo(message: String) {
-        addLog("INFO", message)
+    private fun logInfo(msg: String) {
+        Log.i(TAG, msg)
+        appendLog("INFO", msg)
     }
 
-    fun logError(message: String) {
-        addLog("ERROR", message)
+    private fun logError(msg: String) {
+        Log.e(TAG, msg)
+        appendLog("ERROR", msg)
     }
 
-    private fun addLog(level: String, message: String) {
-        val timeStr = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
-        val entry = DiagnosticLogEntry(timeStr, level, message)
-        _diagnosticLogs.update { list ->
-            (list + entry).takeLast(100)
-        }
-        Log.d(TAG, "[$level] $message")
+    private fun appendLog(level: String, msg: String) {
+        val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
+        val entry = DiagnosticLogEntry(
+            timestamp = timeFormat.format(Date()),
+            level = level,
+            message = msg
+        )
+        _diagnosticLogs.update { (it + entry).takeLast(100) }
     }
 
     companion object {

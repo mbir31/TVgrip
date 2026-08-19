@@ -1,8 +1,10 @@
 package com.example.feature.pairing
 
+import android.bluetooth.BluetoothDevice
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.TVGripApplication
+import com.example.core.bluetooth.BluetoothRemoteState
 import com.example.core.model.CapabilitySet
 import com.example.core.model.DeviceConnectionState
 import com.example.core.model.TvDevice
@@ -21,6 +23,7 @@ enum class PairingStep {
     INTRO,
     SCANNING,
     SELECT_DEVICE,
+    BLUETOOTH_PAIRING,
     PAIRING_CODE_INPUT,
     CONNECTING,
     TESTING_CAPABILITIES,
@@ -28,8 +31,14 @@ enum class PairingStep {
     ERROR
 }
 
+enum class ConnectionMode {
+    WIFI_NETWORK,
+    BLUETOOTH_HID
+}
+
 data class PairingUiState(
     val step: PairingStep = PairingStep.INTRO,
+    val connectionMode: ConnectionMode = ConnectionMode.WIFI_NETWORK,
     val discoveredDevices: List<TvDevice> = emptyList(),
     val selectedDevice: TvDevice? = null,
     val pairingCode: String = "",
@@ -37,7 +46,11 @@ data class PairingUiState(
     val testedCapabilities: CapabilitySet? = null,
     val isScanning: Boolean = false,
     val manualIp: String = "",
-    val isTestingManualIp: Boolean = false
+    val isTestingManualIp: Boolean = false,
+    val bluetoothState: BluetoothRemoteState = BluetoothRemoteState.DISCONNECTED,
+    val bluetoothPairedDevices: List<BluetoothDevice> = emptyList(),
+    val bluetoothDiscoveredDevices: List<BluetoothDevice> = emptyList(),
+    val bluetoothConnectedName: String? = null
 )
 
 class PairingViewModel : ViewModel() {
@@ -45,10 +58,12 @@ class PairingViewModel : ViewModel() {
     private val app = TVGripApplication.instance
     private val discoveryManager = app.discoveryManager
     private val connectionManager = app.connectionManager
+    private val bluetoothManager = app.bluetoothTvRemoteManager
     private val deviceRepository = app.tvDeviceRepository
     private val pairingService = TvPairingService(app)
 
     private val _step = MutableStateFlow(PairingStep.INTRO)
+    private val _connectionMode = MutableStateFlow(ConnectionMode.WIFI_NETWORK)
     private val _selectedDevice = MutableStateFlow<TvDevice?>(null)
     private val _pairingCode = MutableStateFlow("")
     private val _errorMessage = MutableStateFlow<String?>(null)
@@ -58,23 +73,37 @@ class PairingViewModel : ViewModel() {
 
     val uiState: StateFlow<PairingUiState> = combine(
         _step,
+        _connectionMode,
         discoveryManager.discoveredDevices,
         _selectedDevice,
         _pairingCode,
         _errorMessage,
         _testedCapabilities,
-        discoveryManager.isScanning
+        discoveryManager.isScanning,
+        bluetoothManager.bluetoothState,
+        bluetoothManager.pairedTvDevices,
+        bluetoothManager.discoveredTvDevices,
+        bluetoothManager.connectedDeviceName
     ) { params: Array<Any?> ->
         val step = params[0] as PairingStep
+        val mode = params[1] as ConnectionMode
         @Suppress("UNCHECKED_CAST")
-        val devices = params[1] as List<TvDevice>
-        val selected = params[2] as? TvDevice
-        val code = params[3] as String
-        val err = params[4] as? String
-        val caps = params[5] as? CapabilitySet
-        val isScanning = params[6] as Boolean
+        val devices = params[2] as List<TvDevice>
+        val selected = params[3] as? TvDevice
+        val code = params[4] as String
+        val err = params[5] as? String
+        val caps = params[6] as? CapabilitySet
+        val isScanning = params[7] as Boolean
+        val btState = params[8] as BluetoothRemoteState
+        @Suppress("UNCHECKED_CAST")
+        val btPaired = params[9] as List<BluetoothDevice>
+        @Suppress("UNCHECKED_CAST")
+        val btDiscovered = params[10] as List<BluetoothDevice>
+        val btName = params[11] as? String
+
         PairingUiState(
             step = step,
+            connectionMode = mode,
             discoveredDevices = devices,
             selectedDevice = selected,
             pairingCode = code,
@@ -82,7 +111,11 @@ class PairingViewModel : ViewModel() {
             testedCapabilities = caps,
             isScanning = isScanning,
             manualIp = _manualIp.value,
-            isTestingManualIp = _isTestingManualIp.value
+            isTestingManualIp = _isTestingManualIp.value,
+            bluetoothState = btState,
+            bluetoothPairedDevices = btPaired,
+            bluetoothDiscoveredDevices = btDiscovered,
+            bluetoothConnectedName = btName
         )
     }.stateIn(
         scope = viewModelScope,
@@ -90,20 +123,59 @@ class PairingViewModel : ViewModel() {
         initialValue = PairingUiState()
     )
 
+    fun setConnectionMode(mode: ConnectionMode) {
+        _connectionMode.value = mode
+    }
+
     fun startScanning() {
         _errorMessage.value = null
-        _step.value = PairingStep.SCANNING
-        discoveryManager.startDiscovery()
+        if (_connectionMode.value == ConnectionMode.BLUETOOTH_HID) {
+            _step.value = PairingStep.BLUETOOTH_PAIRING
+            bluetoothManager.initialize()
+            bluetoothManager.startDiscovery()
+        } else {
+            _step.value = PairingStep.SCANNING
+            discoveryManager.startDiscovery()
+            viewModelScope.launch {
+                delay(1500)
+                _step.value = PairingStep.SELECT_DEVICE
+            }
+        }
+    }
+
+    fun startBluetoothPairing() {
+        _connectionMode.value = ConnectionMode.BLUETOOTH_HID
+        _step.value = PairingStep.BLUETOOTH_PAIRING
+        bluetoothManager.initialize()
+        bluetoothManager.startDiscovery()
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    fun connectBluetoothDevice(device: BluetoothDevice) {
+        _errorMessage.value = null
+        _step.value = PairingStep.CONNECTING
+        bluetoothManager.connectToDevice(device)
+        
         viewModelScope.launch {
-            delay(1500)
-            _step.value = PairingStep.SELECT_DEVICE
+            delay(1200)
+            val tvDevice = TvDevice(
+                id = "bt_${device.address.replace(":", "")}",
+                name = device.name ?: "Bluetooth TV (${device.address})",
+                host = device.address,
+                port = 0,
+                platform = "Bluetooth HID Remote",
+                connectionState = DeviceConnectionState.CONNECTED
+            )
+            deviceRepository.saveDevice(tvDevice)
+            deviceRepository.setPreferredDevice(tvDevice.id)
+            _selectedDevice.value = tvDevice
+            _step.value = PairingStep.READY
         }
     }
 
     fun selectDevice(device: TvDevice) {
         _selectedDevice.value = device
         _errorMessage.value = null
-        // Trigger TV pairing request on port 6467 to pop up the code on TV screen
         viewModelScope.launch {
             _step.value = PairingStep.CONNECTING
             when (val res = pairingService.startPairing(device)) {
@@ -173,7 +245,6 @@ class PairingViewModel : ViewModel() {
                     val caps = connectionManager.capabilities.value
                     _testedCapabilities.value = caps
 
-                    // Save paired TV to database
                     val paired = device.copy(
                         connectionState = DeviceConnectionState.CONNECTED,
                         capabilities = caps,
@@ -198,11 +269,13 @@ class PairingViewModel : ViewModel() {
         _step.value = PairingStep.INTRO
         _errorMessage.value = null
         discoveryManager.stopDiscovery()
+        bluetoothManager.stopDiscovery()
     }
 
     override fun onCleared() {
         super.onCleared()
         discoveryManager.stopDiscovery()
+        bluetoothManager.stopDiscovery()
         pairingService.disconnect()
     }
 }
