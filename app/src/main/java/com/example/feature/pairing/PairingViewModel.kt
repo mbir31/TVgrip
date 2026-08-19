@@ -46,7 +46,7 @@ class PairingViewModel : ViewModel() {
     private val discoveryManager = app.discoveryManager
     private val connectionManager = app.connectionManager
     private val deviceRepository = app.tvDeviceRepository
-    private val pairingService = TvPairingService()
+    private val pairingService = TvPairingService(app)
 
     private val _step = MutableStateFlow(PairingStep.INTRO)
     private val _selectedDevice = MutableStateFlow<TvDevice?>(null)
