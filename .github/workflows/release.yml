@@ -83,19 +83,15 @@ jobs:
 
           echo "Target Release Tag: $TAG_NAME"
 
-          # Replace previous rolling 'latest' release if on branch push
           if [[ "$TAG_NAME" == "latest" ]]; then
             gh release delete latest --yes || true
             git push --delete origin latest || true
           fi
 
-          gh release create "$TAG_NAME" \
-            release_output/TVGrip.apk#TVGrip.apk \
-            --title "$RELEASE_TITLE" \
-            --notes "### 📺 TVGrip APK Direct Download
-- **Build Commit:** \`${{ github.sha }}\`
-- **Updated:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-- **Features:** Android TV Remote v2, Mutual TLS PIN Pairing, Bluetooth HID Remote, Air Mouse, 4-Player Gamepad, Voice Search.
+          NOTES="### 📺 TVGrip APK Direct Download
+          - Build Commit: ${{ github.sha }}
+          - Features: Android TV Remote v2, Mutual TLS PIN Pairing, Bluetooth HID Remote, Air Mouse, 4-Player Gamepad, Voice Search.
 
-⬇️ Download and install **\`TVGrip.apk\`** on your Android device." \
-            --latest
+          Download and install TVGrip.apk on your Android phone."
+
+          gh release create "$TAG_NAME" release_output/TVGrip.apk --title "$RELEASE_TITLE" --notes "$NOTES" --latest
