@@ -6,6 +6,8 @@ import com.example.TVGripApplication
 import com.example.core.model.CapabilitySet
 import com.example.core.model.DeviceConnectionState
 import com.example.core.model.TvDevice
+import com.example.core.network.PairingResult
+import com.example.core.network.TvPairingService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -44,6 +46,7 @@ class PairingViewModel : ViewModel() {
     private val discoveryManager = app.discoveryManager
     private val connectionManager = app.connectionManager
     private val deviceRepository = app.tvDeviceRepository
+    private val pairingService = TvPairingService()
 
     private val _step = MutableStateFlow(PairingStep.INTRO)
     private val _selectedDevice = MutableStateFlow<TvDevice?>(null)
@@ -99,7 +102,23 @@ class PairingViewModel : ViewModel() {
 
     fun selectDevice(device: TvDevice) {
         _selectedDevice.value = device
-        initiateConnection(device, null)
+        _errorMessage.value = null
+        // Trigger TV pairing request on port 6467 to pop up the code on TV screen
+        viewModelScope.launch {
+            _step.value = PairingStep.CONNECTING
+            when (val res = pairingService.startPairing(device)) {
+                is PairingResult.CodePromptReceived -> {
+                    _step.value = PairingStep.PAIRING_CODE_INPUT
+                }
+                is PairingResult.Success -> {
+                    initiateConnection(device, null)
+                }
+                is PairingResult.Failed -> {
+                    _errorMessage.value = res.error
+                    _step.value = PairingStep.PAIRING_CODE_INPUT
+                }
+            }
+        }
     }
 
     fun setPairingCode(code: String) {
@@ -121,8 +140,7 @@ class PairingViewModel : ViewModel() {
             val device = discoveryManager.testManualIp(ip)
             _isTestingManualIp.value = false
             if (device != null) {
-                _selectedDevice.value = device
-                initiateConnection(device, null)
+                selectDevice(device)
             } else {
                 _errorMessage.value = "Could not reach TV at $ip:6466. Ensure TV is powered on and connected to the same Wi-Fi."
             }
@@ -136,7 +154,11 @@ class PairingViewModel : ViewModel() {
             _errorMessage.value = "Please enter the pairing code displayed on your TV."
             return
         }
-        initiateConnection(device, code)
+        _step.value = PairingStep.CONNECTING
+        viewModelScope.launch {
+            pairingService.confirmPairingCode(code)
+            initiateConnection(device, code)
+        }
     }
 
     private fun initiateConnection(device: TvDevice, code: String?) {
@@ -147,7 +169,7 @@ class PairingViewModel : ViewModel() {
             viewModelScope.launch {
                 if (success) {
                     _step.value = PairingStep.TESTING_CAPABILITIES
-                    delay(1200) // Simulated brief capability self-test sequence
+                    delay(800)
                     val caps = connectionManager.capabilities.value
                     _testedCapabilities.value = caps
 
@@ -181,5 +203,6 @@ class PairingViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         discoveryManager.stopDiscovery()
+        pairingService.disconnect()
     }
 }

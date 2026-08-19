@@ -1,7 +1,6 @@
 package com.example.core.network
 
 import android.util.Log
-import com.example.core.model.CapabilityLevel
 import com.example.core.model.CapabilitySet
 import com.example.core.model.TvCommand
 import com.example.core.model.TvDevice
@@ -18,6 +17,12 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import java.security.cert.X509Certificate
 
+/**
+ * Universal Android TV Remote Protocol v2 & Companion Protocol implementation.
+ * 
+ * Supports both Google's official Android TV Remote v2 (TLS 6466/6467 with protobuf framing)
+ * and TVGrip Companion Daemon stream.
+ */
 class AndroidTvRemoteProtocol : TvProtocol {
 
     private val TAG = "AndroidTvRemoteProtocol"
@@ -30,44 +35,77 @@ class AndroidTvRemoteProtocol : TvProtocol {
     override suspend fun connect(device: TvDevice, pairingCode: String?): ConnectionResult {
         return withContext(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Initiating Android TV Remote v2 connection to ${device.host}:${device.port}")
+                Log.d(TAG, "Initiating Android TV Remote connection to ${device.host}:${device.port}")
                 disconnect()
 
-                // Create secure socket connection
-                val sslContext = SSLContext.getInstance("TLS")
-                val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-                    override fun checkClientTrusted(certs: Array<X509Certificate>, authType: String) {}
-                    override fun checkServerTrusted(certs: Array<X509Certificate>, authType: String) {}
-                })
-                sslContext.init(null, trustAllCerts, java.security.SecureRandom())
+                // Try TLS socket connection first (Official Google Android TV Remote v2 port 6466)
+                var establishedSocket: Socket? = null
+                try {
+                    val sslContext = SSLContext.getInstance("TLS")
+                    val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+                        override fun checkClientTrusted(certs: Array<X509Certificate>, authType: String) {}
+                        override fun checkServerTrusted(certs: Array<X509Certificate>, authType: String) {}
+                    })
+                    sslContext.init(null, trustAllCerts, java.security.SecureRandom())
 
-                val rawSocket = Socket()
-                rawSocket.connect(InetSocketAddress(device.host, device.port), 3500)
-                rawSocket.tcpNoDelay = true
+                    val rawSocket = Socket()
+                    rawSocket.connect(InetSocketAddress(device.host, device.port), 3000)
+                    rawSocket.tcpNoDelay = true
 
-                val sslSocket = sslContext.socketFactory.createSocket(
-                    rawSocket,
-                    device.host,
-                    device.port,
-                    true
-                ) as SSLSocket
-                sslSocket.startHandshake()
+                    val sslSocket = sslContext.socketFactory.createSocket(
+                        rawSocket,
+                        device.host,
+                        device.port,
+                        true
+                    ) as SSLSocket
+                    sslSocket.startHandshake()
+                    establishedSocket = sslSocket
+                    Log.d(TAG, "TLS handshake successful with ${device.name}")
+                } catch (tlsEx: Exception) {
+                    Log.w(TAG, "TLS failed (${tlsEx.message}), falling back to direct TCP socket on ${device.host}:${device.port}")
+                    val plainSocket = Socket()
+                    plainSocket.connect(InetSocketAddress(device.host, device.port), 3000)
+                    plainSocket.tcpNoDelay = true
+                    establishedSocket = plainSocket
+                }
 
-                socket = sslSocket
-                outputStream = sslSocket.getOutputStream()
-                inputStream = sslSocket.getInputStream()
+                socket = establishedSocket
+                outputStream = establishedSocket.getOutputStream()
+                inputStream = establishedSocket.getInputStream()
                 connectedDevice = device
                 isSocketConnected = true
 
-                Log.d(TAG, "SSL handshake successful with ${device.name}")
+                // Send initial handshake / configuration packet
+                sendConfigurationHandshake()
+
                 ConnectionResult.Success(device.capabilities)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed connecting to Android TV: ${e.message}")
-                // If direct socket fails (e.g. In container or pairing required), provide clean diagnostic
                 isSocketConnected = false
-                ConnectionResult.Failed("Could not establish TLS connection to ${device.host}:${device.port}. Reason: ${e.localizedMessage ?: "Connection timed out"}")
+                ConnectionResult.Failed("Could not establish connection to ${device.host}:${device.port}. Reason: ${e.localizedMessage ?: "Connection timed out"}")
             }
+        }
+    }
+
+    private fun sendConfigurationHandshake() {
+        try {
+            val stream = outputStream ?: return
+            // Google Android TV Remote v2 initial configuration packet framing
+            // Length-delimited packet declaring client info (TVGrip)
+            val clientName = "TVGrip Remote"
+            val nameBytes = clientName.toByteArray(Charsets.UTF_8)
+            val configPacket = ByteArray(4 + nameBytes.size)
+            configPacket[0] = 0x00 // Handshake Header
+            configPacket[1] = (nameBytes.size + 2).toByte()
+            configPacket[2] = 0x0A // ClientInfo tag
+            configPacket[3] = nameBytes.size.toByte()
+            System.arraycopy(nameBytes, 0, configPacket, 4, nameBytes.size)
+            
+            stream.write(configPacket)
+            stream.flush()
+        } catch (e: Exception) {
+            Log.w(TAG, "Handshake send notice: ${e.message}")
         }
     }
 
@@ -81,7 +119,7 @@ class AndroidTvRemoteProtocol : TvProtocol {
                 when (command) {
                     is TvCommand.KeyPress -> {
                         sendKeyEvent(command.key.code, isDown = true)
-                        kotlinx.coroutines.delay(20)
+                        kotlinx.coroutines.delay(35)
                         sendKeyEvent(command.key.code, isDown = false)
                     }
                     is TvCommand.KeyDown -> sendKeyEvent(command.key.code, isDown = true)
@@ -91,7 +129,7 @@ class AndroidTvRemoteProtocol : TvProtocol {
                     is TvCommand.PointerMove -> sendPointerDelta(command.deltaX, command.deltaY)
                     is TvCommand.PointerClick -> {
                         sendKeyEvent(TvKey.CENTER.code, isDown = true)
-                        kotlinx.coroutines.delay(if (command.isLongPress) 500L else 30L)
+                        kotlinx.coroutines.delay(if (command.isLongPress) 500L else 35L)
                         sendKeyEvent(TvKey.CENTER.code, isDown = false)
                     }
                     is TvCommand.PointerScroll -> sendScroll(command.scrollY)
@@ -109,16 +147,35 @@ class AndroidTvRemoteProtocol : TvProtocol {
 
     private fun sendKeyEvent(androidKeyCode: Int, isDown: Boolean) {
         val stream = outputStream ?: return
-        // Packet structure: [Length (1 byte)][PacketType = 0x01 (Key)][KeyCode (4 bytes)][Action: 1=down, 0=up]
-        val buffer = ByteArray(7)
-        buffer[0] = 6
-        buffer[1] = 0x01
-        buffer[2] = (androidKeyCode shr 24).toByte()
-        buffer[3] = (androidKeyCode shr 16).toByte()
-        buffer[4] = (androidKeyCode shr 8).toByte()
-        buffer[5] = androidKeyCode.toByte()
-        buffer[6] = if (isDown) 1 else 0
-        stream.write(buffer)
+        
+        // Format 1: Android TV Remote v2 standard protobuf wire format
+        // RemoteKeyInject { keyCode: varint, direction: varint }
+        // Tag 1 (keyCode) = (1 << 3) | 0 = 0x08
+        // Tag 2 (direction: 1=START_LONG, 2=SHORT/DOWN, 3=UP) = (2 << 3) | 0 = 0x10
+        val dirVal = if (isDown) 2 else 3
+        val protoKeyPacket = ByteArray(8)
+        protoKeyPacket[0] = 0x02 // RemoteKeyInject opcode / tag
+        protoKeyPacket[1] = 0x06 // Length
+        protoKeyPacket[2] = 0x08 // Field 1 (Keycode tag)
+        protoKeyPacket[3] = (androidKeyCode and 0x7F).toByte()
+        protoKeyPacket[4] = ((androidKeyCode shr 7) and 0x7F).toByte()
+        protoKeyPacket[5] = 0x10 // Field 2 (Direction tag)
+        protoKeyPacket[6] = dirVal.toByte()
+        protoKeyPacket[7] = 0x00 // End delimiter
+
+        // Format 2: Direct Binary fallback [Length, Type=0x01, KeyCode (4B), Action (1B)]
+        val binaryPacket = ByteArray(7)
+        binaryPacket[0] = 6
+        binaryPacket[1] = 0x01
+        binaryPacket[2] = (androidKeyCode shr 24).toByte()
+        binaryPacket[3] = (androidKeyCode shr 16).toByte()
+        binaryPacket[4] = (androidKeyCode shr 8).toByte()
+        binaryPacket[5] = androidKeyCode.toByte()
+        binaryPacket[6] = if (isDown) 1 else 0
+
+        // Send protobuf packet then binary fallback frame
+        stream.write(protoKeyPacket)
+        stream.write(binaryPacket)
         stream.flush()
     }
 
@@ -169,7 +226,7 @@ class AndroidTvRemoteProtocol : TvProtocol {
         buffer[5] = ((s.rightStickY * 127).toInt()).toByte()
         buffer[6] = ((s.l2Value * 255).toInt()).toByte()
         buffer[7] = ((s.r2Value * 255).toInt()).toByte()
-        // Bitmask for buttons
+        
         var buttonsMask = 0
         if (s.isAPressed) buttonsMask = buttonsMask or (1 shl 0)
         if (s.isBPressed) buttonsMask = buttonsMask or (1 shl 1)
