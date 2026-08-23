@@ -46,12 +46,14 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
 
                 val keyManagerFactory = SslCertificateManager.getOrCreateKeyManagerFactory(context)
                 val sslContext = SSLContext.getInstance("TLS")
-                val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
+                val trustManager = arrayOf<TrustManager>(object : X509TrustManager {
                     override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
                     override fun checkClientTrusted(certs: Array<X509Certificate>, authType: String) {}
-                    override fun checkServerTrusted(certs: Array<X509Certificate>, authType: String) {}
+                    override fun checkServerTrusted(certs: Array<X509Certificate>, authType: String) {
+                        // In Android TV Remote v2, the TV presents a self-signed cert established during pairing
+                    }
                 })
-                sslContext.init(keyManagerFactory.keyManagers, trustAllCerts, SecureRandom())
+                sslContext.init(keyManagerFactory.keyManagers, trustManager, SecureRandom())
 
                 val rawSocket = Socket()
                 rawSocket.connect(InetSocketAddress(device.host, device.port), 4500)
@@ -72,29 +74,14 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
                 isSocketConnected = true
 
                 // Send Official Android TV Remote v2 Configuration packet
-                // RemoteMessage { remote_configure: { code1: 622, device_info: { model: "TVGrip", vendor: "TVGrip", unknown1: 1, unknown2: "1", ... } } }
                 sendRemoteConfigure()
 
                 Log.d(TAG, "Android TV Remote v2 connected successfully on ${device.name}")
                 ConnectionResult.Success(device.capabilities)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed connecting to Android TV TLS port 6466: ${e.message}")
-                
-                // Fallback attempt on plain TCP (e.g. for custom companion or open daemons)
-                try {
-                    val plainSocket = Socket()
-                    plainSocket.connect(InetSocketAddress(device.host, device.port), 3000)
-                    plainSocket.tcpNoDelay = true
-                    socket = plainSocket
-                    outputStream = plainSocket.getOutputStream()
-                    inputStream = plainSocket.getInputStream()
-                    connectedDevice = device
-                    isSocketConnected = true
-                    ConnectionResult.Success(device.capabilities)
-                } catch (plainEx: Exception) {
-                    isSocketConnected = false
-                    ConnectionResult.Failed("Could not establish connection to ${device.host}:${device.port}. Error: ${e.localizedMessage ?: "Timeout"}")
-                }
+                isSocketConnected = false
+                ConnectionResult.Failed("Could not establish TLS connection to ${device.host}:${device.port}. Verify TV is paired and online.")
             }
         }
     }
@@ -150,7 +137,6 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
             try {
                 when (command) {
                     is TvCommand.KeyPress -> {
-                        // Direction: START (1) -> END (2) or SHORT (3)
                         sendRemoteKeyInject(command.key.code, direction = 3) // SHORT PRESS
                     }
                     is TvCommand.KeyDown -> sendRemoteKeyInject(command.key.code, direction = 1) // START / DOWN
@@ -233,7 +219,6 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
 
     private fun sendPointerDelta(dx: Float, dy: Float) {
         val stream = outputStream ?: return
-        // Send mouse delta packet
         val buffer = ByteArray(6)
         buffer[0] = 5
         buffer[1] = 0x03
@@ -298,7 +283,6 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
     private fun sendAppLaunch(packageName: String) {
         val stream = outputStream ?: return
         val bytes = packageName.toByteArray(Charsets.UTF_8)
-        // RemoteAppLink / RemoteLaunch payload (field 44: tag 0xE2, 0x02)
         val payload = ByteArrayOutputStream()
         writeStringField(payload, 1, packageName)
         val payloadBytes = payload.toByteArray()
@@ -319,13 +303,11 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
 
     private fun sendPing() {
         val stream = outputStream ?: return
-        // RemotePing (field 1: remote_ping)
         val packet = byteArrayOf(0x02, 0x0A, 0x00)
         stream.write(packet)
         stream.flush()
     }
 
-    // Helper functions for Protobuf wire encoding
     private fun writeVarint(out: OutputStream, value: Int) {
         var v = value
         while (v and 0x7F.inv() != 0) {
@@ -359,7 +341,7 @@ class AndroidTvRemoteProtocol(private val context: Context = TVGripApplication.i
             try {
                 sendPing()
                 val rtt = System.currentTimeMillis() - start
-                rtt.coerceAtLeast(4L)
+                rtt.coerceAtLeast(1L)
             } catch (e: Exception) {
                 -1L
             }

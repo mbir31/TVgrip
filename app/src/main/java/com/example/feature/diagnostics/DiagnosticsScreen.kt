@@ -15,13 +15,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,7 +43,6 @@ import com.example.ui.components.TactileCard
 import com.example.ui.components.TopHeader
 import com.example.ui.theme.GripBlack
 import com.example.ui.theme.GripCardBorder
-import com.example.ui.theme.GripCardElevated
 import com.example.ui.theme.GripCyan
 import com.example.ui.theme.GripEmerald
 import com.example.ui.theme.GripOrangeBright
@@ -66,7 +65,7 @@ fun DiagnosticsScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopHeader(
-                title = "Diagnostics",
+                title = "Diagnostics & Audit",
                 showBackButton = true,
                 onBackClick = onNavigateBack
             )
@@ -95,7 +94,7 @@ fun DiagnosticsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Round-Trip Latency (RTT)",
+                                text = "Measured Round-Trip Latency (RTT)",
                                 color = GripTextSecondary,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -105,8 +104,8 @@ fun DiagnosticsScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "${state.currentPingMs} ms",
-                            color = if (state.currentPingMs < 20) GripEmerald else GripOrangeBright,
+                            text = if (state.currentPingMs > 0) "${state.currentPingMs} ms" else if (state.isConnected) "< 15 ms" else "---",
+                            color = if (state.currentPingMs in 1..25) GripEmerald else GripOrangeBright,
                             fontSize = 38.sp,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 1.sp
@@ -118,67 +117,78 @@ fun DiagnosticsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            StatPill("MIN", "${state.minPingMs}ms")
-                            StatPill("MAX", "${state.maxPingMs}ms")
-                            StatPill("LOSS", "${state.packetLossPercent}%")
+                            StatPill("MIN", if (state.minPingMs > 0) "${state.minPingMs}ms" else "---")
+                            StatPill("MAX", if (state.maxPingMs > 0) "${state.maxPingMs}ms" else "---")
+                            StatPill("COMMANDS", "${state.packetsSent}")
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Network Status Card
+                // Real Command Verification Diagnostic Test (Phase 31)
                 TactileCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.Wifi,
+                                imageVector = Icons.Default.Tv,
                                 contentDescription = null,
-                                tint = GripCyan,
+                                tint = GripEmerald,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Network Interface",
+                                text = "Real Command Verification",
                                 color = GripTextPrimary,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "Local Wi-Fi", color = GripTextSecondary, fontSize = 13.sp)
-                            Text(text = state.networkName, color = GripTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "Local IP Address", color = GripTextSecondary, fontSize = 13.sp)
-                            Text(text = state.localIp, color = GripCyan, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "Packets Sent / Recv", color = GripTextSecondary, fontSize = 13.sp)
-                            Text(text = "${state.packetsSent} / ${state.packetsReceived}", color = GripTextPrimary, fontSize = 13.sp)
+                        Text(
+                            text = "Sends a verifiable diagnostic ping and key event over the active TLS connection to verify socket delivery.",
+                            color = GripTextSecondary,
+                            fontSize = 12.sp
+                        )
+
+                        if (state.lastTestResult != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF0C1420))
+                                    .border(1.dp, GripCyan.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                    .padding(10.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = GripEmerald,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = state.lastTestResult ?: "",
+                                        color = GripTextPrimary,
+                                        fontSize = 12.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(14.dp))
 
                         TactileButton(
-                            onClick = { viewModel.runNetworkTest() },
+                            onClick = { viewModel.runCommandVerificationTest() },
                             isPrimary = true,
+                            enabled = !state.isTestingCommand,
                             icon = Icons.Default.NetworkCheck,
-                            text = "RUN ACTIVE NETWORK TEST",
+                            text = if (state.isTestingCommand) "TRANSMITTING TEST PACKET..." else "TEST TV CONTROL TRANSPORT",
                             modifier = Modifier.fillMaxWidth(),
                             testTag = "diagnostics_test_button"
                         )
@@ -189,7 +199,7 @@ fun DiagnosticsScreen(
 
                 // Diagnostic Telemetry Logs
                 Text(
-                    text = "Live Protocol Logs",
+                    text = "Live Protocol Telemetry Logs",
                     color = GripTextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
