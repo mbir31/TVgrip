@@ -181,7 +181,8 @@ fun PairingWizardScreen(
                         )
                         PairingStep.ERROR -> StepError(
                             message = state.errorMessage ?: "Connection failed.",
-                            onRetry = { viewModel.retry() }
+                            onRetry = { viewModel.retry() },
+                            onSwitchToBluetooth = { requestBluetoothAndStart() }
                         )
                     }
                 }
@@ -886,45 +887,94 @@ private fun StepReady(
 @Composable
 private fun StepError(
     message: String,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onSwitchToBluetooth: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(24.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = Icons.Default.Error,
             contentDescription = null,
             tint = GripRed,
-            modifier = Modifier.size(56.dp)
+            modifier = Modifier.size(52.dp)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         Text(
-            text = "Connection Failed",
+            text = "Wi-Fi Pairing Notice",
             color = GripTextPrimary,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         Text(
             text = message,
             color = GripTextSecondary,
             fontSize = 13.sp,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            lineHeight = 18.sp
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Direct Bluetooth HID Recommendation Card
+        TactileCard(
+            modifier = Modifier.fillMaxWidth(),
+            borderColor = GripCyan.copy(alpha = 0.5f)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Bluetooth,
+                        contentDescription = null,
+                        tint = GripCyan,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Instant Bluetooth Alternative",
+                        color = GripCyan,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "If your TV blocks Wi-Fi pairing or uses a custom OS, you can pair TVGrip directly as a Bluetooth Remote/Gamepad in 5 seconds without any PIN code prompt.",
+                    color = GripTextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                TactileButton(
+                    onClick = onSwitchToBluetooth,
+                    modifier = Modifier.fillMaxWidth(),
+                    isPrimary = true,
+                    icon = Icons.Default.Bluetooth,
+                    text = "USE BLUETOOTH MODE INSTEAD",
+                    testTag = "error_switch_to_bluetooth_btn"
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         TactileButton(
             onClick = onRetry,
             modifier = Modifier.fillMaxWidth(),
-            text = "TRY AGAIN",
+            text = "RETRY WI-FI PAIRING",
             accentColor = GripOrangeBright,
             testTag = "pairing_error_retry_button"
         )
