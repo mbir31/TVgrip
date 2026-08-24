@@ -103,21 +103,6 @@ class TvConnectionManager {
     }
 
     fun sendCommand(command: TvCommand) {
-        // Check Bluetooth HID connection fallback
-        val btManager = runCatching { TVGripApplication.instance.bluetoothTvRemoteManager }.getOrNull()
-        if (btManager != null && btManager.isConnected()) {
-            when (command) {
-                is TvCommand.KeyPress -> btManager.sendTvKey(command.key)
-                is TvCommand.KeyDown -> btManager.sendTvKey(command.key)
-                is TvCommand.KeyUp -> {}
-                is TvCommand.PointerMove -> btManager.sendMouseDelta(command.deltaX.toInt(), command.deltaY.toInt(), leftClick = false)
-                is TvCommand.PointerClick -> btManager.sendTvKey(com.example.core.model.TvKey.CENTER)
-                else -> {}
-            }
-            _packetCountSent.update { it + 1 }
-            return
-        }
-
         val protocol = activeProtocol
         if (protocol == null || !protocol.isConnected()) {
             return

@@ -1,10 +1,5 @@
 package com.example.feature.pairing
 
-import android.Manifest
-import android.bluetooth.BluetoothDevice
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -26,12 +21,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Refresh
@@ -51,13 +45,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.core.bluetooth.BluetoothRemoteState
 import com.example.core.model.CapabilitySet
 import com.example.core.model.TvDevice
 import com.example.ui.components.DeveloperCredit
@@ -84,35 +78,6 @@ fun PairingWizardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.values.all { it }
-        if (allGranted) {
-            viewModel.startBluetoothPairing()
-        }
-    }
-
-    fun requestBluetoothAndStart() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            bluetoothPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.BLUETOOTH_CONNECT,
-                    Manifest.permission.BLUETOOTH_SCAN,
-                    Manifest.permission.BLUETOOTH_ADVERTISE
-                )
-            )
-        } else {
-            bluetoothPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.BLUETOOTH,
-                    Manifest.permission.BLUETOOTH_ADMIN,
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                )
-            )
-        }
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -120,7 +85,7 @@ fun PairingWizardScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopHeader(
-                title = "Pair a TV",
+                title = "Pair Wi-Fi TV",
                 showBackButton = true,
                 onBackClick = onNavigateBack
             )
@@ -139,34 +104,20 @@ fun PairingWizardScreen(
                 ) { step ->
                     when (step) {
                         PairingStep.INTRO -> StepIntro(
-                            onStartWiFlyScan = { viewModel.startScanning() },
-                            onStartBluetoothPairing = { requestBluetoothAndStart() }
+                            onStartScan = { viewModel.startScanning() }
                         )
                         PairingStep.SCANNING -> StepScanning()
                         PairingStep.SELECT_DEVICE -> StepSelectDevice(
                             devices = state.discoveredDevices,
                             onSelectDevice = { viewModel.selectDevice(it) },
                             onRescan = { viewModel.startScanning() },
-                            onSwitchToBluetooth = { requestBluetoothAndStart() },
                             manualIp = state.manualIp,
                             onManualIpChange = { viewModel.setManualIp(it) },
-                            onSubmitManualIp = { viewModel.submitManualIp() },
-                            isTestingManualIp = state.isTestingManualIp,
-                            errorMessage = state.errorMessage
-                        )
-                        PairingStep.BLUETOOTH_PAIRING -> StepBluetoothPairing(
-                            btState = state.bluetoothState,
-                            pairedDevices = state.bluetoothPairedDevices,
-                            discoveredDevices = state.bluetoothDiscoveredDevices,
-                            onRequestPermission = { requestBluetoothAndStart() },
-                            onConnectBt = { viewModel.connectBluetoothDevice(it) },
-                            onRescanBt = { viewModel.startBluetoothPairing() },
-                            onSwitchToWifi = { 
-                                viewModel.setConnectionMode(ConnectionMode.WIFI_NETWORK)
-                                viewModel.startScanning()
-                            }
+                            onSubmitManualIp = { viewModel.connectManualIp() },
+                            isTestingManualIp = state.isTestingManualIp
                         )
                         PairingStep.PAIRING_CODE_INPUT -> StepPairingCode(
+                            prompt = state.pairingPrompt,
                             code = state.pairingCode,
                             onCodeChange = { viewModel.setPairingCode(it) },
                             onSubmit = { viewModel.submitPairingCode() },
@@ -181,8 +132,7 @@ fun PairingWizardScreen(
                         )
                         PairingStep.ERROR -> StepError(
                             message = state.errorMessage ?: "Connection failed.",
-                            onRetry = { viewModel.retry() },
-                            onSwitchToBluetooth = { requestBluetoothAndStart() }
+                            onRetry = { viewModel.retry() }
                         )
                     }
                 }
@@ -195,8 +145,7 @@ fun PairingWizardScreen(
 
 @Composable
 private fun StepIntro(
-    onStartWiFlyScan: () -> Unit,
-    onStartBluetoothPairing: () -> Unit
+    onStartScan: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -206,20 +155,21 @@ private fun StepIntro(
     ) {
         Box(
             modifier = Modifier
-                .size(76.dp)
+                .size(80.dp)
                 .clip(CircleShape)
-                .background(GripCardElevated),
+                .background(GripCardElevated)
+                .border(1.dp, GripCyan.copy(alpha = 0.4f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.Tv,
+                imageVector = Icons.Default.Wifi,
                 contentDescription = null,
                 tint = GripCyan,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(42.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         Text(
             text = "Connect Your TV",
@@ -229,40 +179,27 @@ private fun StepIntro(
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         Text(
-            text = "Choose how you'd like to connect to your Smart TV or Android TV box:",
+            text = "Make sure your phone and TV are connected to the same Wi-Fi network. TVGrip will automatically discover your Android TV or Google TV.",
             color = GripTextSecondary,
             fontSize = 14.sp,
             textAlign = TextAlign.Center,
-            lineHeight = 20.sp
+            lineHeight = 22.sp
         )
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
         TactileButton(
-            onClick = onStartWiFlyScan,
+            onClick = onStartScan,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(56.dp)
+                .testTag("scan_for_tvs_button"),
             isPrimary = true,
             icon = Icons.Default.Wifi,
-            text = "WI-FI / NETWORK (RECOMMENDED)",
-            testTag = "pairing_start_wifi"
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        TactileButton(
-            onClick = onStartBluetoothPairing,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            accentColor = GripCyan,
-            icon = Icons.Default.Bluetooth,
-            text = "BLUETOOTH REMOTE (DIRECT HID)",
-            testTag = "pairing_start_bluetooth"
+            text = "Scan for TVs"
         )
     }
 }
@@ -277,14 +214,14 @@ private fun StepScanning() {
     ) {
         CircularProgressIndicator(
             color = GripCyan,
-            modifier = Modifier.size(56.dp),
-            strokeWidth = 3.5.dp
+            strokeWidth = 3.dp,
+            modifier = Modifier.size(64.dp)
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Searching Wi-Fi Network...",
+            text = "Scanning Wi-Fi Network...",
             color = GripTextPrimary,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold
@@ -293,202 +230,11 @@ private fun StepScanning() {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Discovering Android TV Remote v2 & Google Cast devices...",
+            text = "Searching for Android TV, Google TV, and Cast devices via mDNS",
             color = GripTextSecondary,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             textAlign = TextAlign.Center
         )
-    }
-}
-
-@Composable
-private fun StepBluetoothPairing(
-    btState: BluetoothRemoteState,
-    pairedDevices: List<BluetoothDevice>,
-    discoveredDevices: List<BluetoothDevice>,
-    onRequestPermission: () -> Unit,
-    onConnectBt: (BluetoothDevice) -> Unit,
-    onRescanBt: () -> Unit,
-    onSwitchToWifi: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Bluetooth TV Remote",
-            color = GripTextPrimary,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Text(
-            text = "Connect directly as a hardware Bluetooth TV remote control.",
-            color = GripTextSecondary,
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (btState == BluetoothRemoteState.PERMISSION_REQUIRED) {
-            TactileCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Bluetooth Permission Needed",
-                        color = GripOrangeBright,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "TVGrip needs Nearby Devices (Bluetooth) permission to connect as a TV remote.",
-                        color = GripTextSecondary,
-                        fontSize = 13.sp,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    TactileButton(
-                        onClick = onRequestPermission,
-                        text = "GRANT BLUETOOTH PERMISSION",
-                        isPrimary = true,
-                        testTag = "grant_bt_permission_btn"
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        // Paired devices
-        if (pairedDevices.isNotEmpty()) {
-            Text(
-                text = "PAIRED BLUETOOTH DEVICES",
-                color = GripCyan,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp)
-            )
-
-            pairedDevices.forEach { dev ->
-                BluetoothDeviceCard(device = dev, onClick = { onConnectBt(dev) })
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        // Discovered devices
-        Text(
-            text = if (btState == BluetoothRemoteState.SCANNING) "SCANNING FOR NEARBY BLUETOOTH TVS..." else "AVAILABLE BLUETOOTH DEVICES",
-            color = GripOrangeBright,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp)
-        )
-
-        if (discoveredDevices.isEmpty() && pairedDevices.isEmpty()) {
-            TactileCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Put your TV in Bluetooth Pairing Mode under Settings > Remotes & Accessories > Add Accessory.",
-                        color = GripTextSecondary,
-                        fontSize = 13.sp,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    TactileButton(
-                        onClick = onRescanBt,
-                        icon = Icons.Default.BluetoothSearching,
-                        text = "SCAN BLUETOOTH",
-                        accentColor = GripCyan,
-                        testTag = "bt_rescan_button"
-                    )
-                }
-            }
-        } else {
-            discoveredDevices.forEach { dev ->
-                BluetoothDeviceCard(device = dev, onClick = { onConnectBt(dev) })
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        TactileButton(
-            onClick = onSwitchToWifi,
-            modifier = Modifier.fillMaxWidth(),
-            icon = Icons.Default.Wifi,
-            text = "SWITCH TO WI-FI DISCOVERY",
-            testTag = "switch_to_wifi_btn"
-        )
-    }
-}
-
-@Composable
-private fun BluetoothDeviceCard(
-    device: BluetoothDevice,
-    onClick: () -> Unit
-) {
-    val devName = try { device.name ?: device.address } catch (e: SecurityException) { device.address }
-    TactileCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        onClick = onClick
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(GripCardElevated),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Bluetooth,
-                    contentDescription = null,
-                    tint = GripCyan,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = devName,
-                    color = GripTextPrimary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = device.address,
-                    color = GripTextSecondary,
-                    fontSize = 12.sp
-                )
-            }
-            TactileButton(
-                onClick = onClick,
-                text = "PAIR",
-                isPrimary = true,
-                testTag = "bt_pair_${device.address}"
-            )
-        }
     }
 }
 
@@ -497,71 +243,57 @@ private fun StepSelectDevice(
     devices: List<TvDevice>,
     onSelectDevice: (TvDevice) -> Unit,
     onRescan: () -> Unit,
-    onSwitchToBluetooth: () -> Unit,
     manualIp: String,
     onManualIpChange: (String) -> Unit,
     onSubmitManualIp: () -> Unit,
-    isTestingManualIp: Boolean,
-    errorMessage: String?
+    isTestingManualIp: Boolean
 ) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(vertical = 12.dp),
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Discovered Wi-Fi TVs",
+            text = "Discovered Devices",
             color = GripTextPrimary,
             fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
         )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = "Select your TV to connect",
-            color = GripTextSecondary,
-            fontSize = 13.sp
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         if (devices.isEmpty()) {
-            TactileCard(modifier = Modifier.fillMaxWidth()) {
+            TactileCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Tv,
+                        contentDescription = null,
+                        tint = GripTextTertiary,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "No Wi-Fi TV automatically discovered yet.",
+                        text = "No TVs discovered automatically yet",
                         color = GripTextSecondary,
                         fontSize = 14.sp,
-                        textAlign = TextAlign.Center
+                        fontWeight = FontWeight.Medium
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TactileButton(
-                            onClick = onRescan,
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Default.Refresh,
-                            text = "SCAN AGAIN",
-                            accentColor = GripOrangeBright,
-                            testTag = "pairing_rescan_button"
-                        )
-                        TactileButton(
-                            onClick = onSwitchToBluetooth,
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Default.Bluetooth,
-                            text = "USE BLUETOOTH",
-                            accentColor = GripCyan,
-                            testTag = "use_bluetooth_btn"
-                        )
-                    }
+                    Text(
+                        text = "Ensure the TV is turned on and on the same Wi-Fi, or enter its IP address below.",
+                        color = GripTextTertiary,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
             }
         } else {
@@ -569,113 +301,137 @@ private fun StepSelectDevice(
                 TactileCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    onClick = { onSelectDevice(device) }
+                        .padding(vertical = 6.dp)
+                        .clickable { onSelectDevice(device) }
+                        .testTag("device_card_${device.id}")
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(GripCardElevated),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Tv,
-                                contentDescription = null,
-                                tint = GripCyan,
-                                modifier = Modifier.size(24.dp)
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(GripCardElevated),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Tv,
+                                    contentDescription = null,
+                                    tint = GripCyan,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = device.name,
+                                    color = GripTextPrimary,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "${device.manufacturer} • ${device.host}",
+                                    color = GripTextTertiary,
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = device.name,
-                                color = GripTextPrimary,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${device.platform} · ${device.host}",
-                                color = GripTextSecondary,
-                                fontSize = 12.sp
-                            )
-                        }
+
                         TactileButton(
                             onClick = { onSelectDevice(device) },
-                            text = "CONNECT",
+                            modifier = Modifier.height(38.dp),
                             isPrimary = true,
-                            testTag = "connect_device_${device.id}"
+                            text = "Pair"
                         )
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Manual IP Fallback
-        TactileCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
+        // Direct IP Entry Card
+        TactileCard(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
                 Text(
-                    text = "Manual Connection (IP Address)",
+                    text = "Connect by TV IP Address",
                     color = GripTextPrimary,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = manualIp,
-                    onValueChange = onManualIpChange,
-                    placeholder = { Text("192.168.1.100", color = GripTextTertiary) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("manual_ip_input"),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { onSubmitManualIp() }),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GripCyan,
-                        unfocusedBorderColor = GripCardBorder,
-                        focusedTextColor = GripTextPrimary,
-                        unfocusedTextColor = GripTextPrimary
-                    )
+                Text(
+                    text = "Found in TV Settings → Network → Wi-Fi",
+                    color = GripTextTertiary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
                 )
 
-                if (errorMessage != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = errorMessage,
-                        color = GripRed,
-                        fontSize = 12.sp
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = manualIp,
+                        onValueChange = onManualIpChange,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("manual_ip_input"),
+                        placeholder = { Text("192.168.1.100", color = GripTextTertiary) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { onSubmitManualIp() }),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GripCyan,
+                            unfocusedBorderColor = GripCardBorder,
+                            focusedTextColor = GripTextPrimary,
+                            unfocusedTextColor = GripTextPrimary
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    TactileButton(
+                        onClick = onSubmitManualIp,
+                        modifier = Modifier
+                            .height(52.dp)
+                            .testTag("submit_manual_ip_button"),
+                        isPrimary = true,
+                        text = if (isTestingManualIp) "..." else "Connect"
                     )
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                TactileButton(
-                    onClick = onSubmitManualIp,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isTestingManualIp,
-                    text = if (isTestingManualIp) "TESTING IP..." else "CONNECT TO IP",
-                    isPrimary = true,
-                    testTag = "submit_manual_ip_button"
-                )
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        TactileButton(
+            onClick = onRescan,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .testTag("rescan_tvs_button"),
+            isPrimary = false,
+            icon = Icons.Default.Refresh,
+            text = "Rescan Network"
+        )
     }
 }
 
 @Composable
 private fun StepPairingCode(
+    prompt: String,
     code: String,
     onCodeChange: (String) -> Unit,
     onSubmit: () -> Unit,
@@ -687,33 +443,93 @@ private fun StepPairingCode(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(GripCardElevated)
+                .border(1.dp, GripCyan.copy(alpha = 0.5f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Tv,
+                contentDescription = null,
+                tint = GripCyan,
+                modifier = Modifier.size(36.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Text(
-            text = "Confirm Pairing Code",
+            text = "Enter Pairing Code",
             color = GripTextPrimary,
             fontSize = 22.sp,
-            fontWeight = FontWeight.Black
+            fontWeight = FontWeight.Black,
+            textAlign = TextAlign.Center
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Enter the 6-character code or PIN displayed on your TV screen.",
+            text = prompt,
             color = GripTextSecondary,
             fontSize = 14.sp,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Visual PIN Box Display
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val paddedCode = code.padEnd(6, ' ')
+            for (i in 0 until 6) {
+                val char = paddedCode[i]
+                val isCurrent = i == code.length
+                val isFilled = i < code.length
+
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .padding(horizontal = 3.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isFilled) GripCardElevated else GripBlack)
+                        .border(
+                            width = if (isCurrent) 2.dp else 1.dp,
+                            color = if (isCurrent) GripCyan else if (isFilled) GripCyan.copy(alpha = 0.5f) else GripCardBorder,
+                            shape = RoundedCornerShape(8.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (char != ' ') char.toString() else "",
+                        color = GripTextPrimary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Hidden / Overlay Input field
         OutlinedTextField(
             value = code,
             onValueChange = onCodeChange,
-            placeholder = { Text("Pairing Code", color = GripTextTertiary) },
             modifier = Modifier
-                .fillMaxWidth(0.8f)
-                .testTag("pairing_code_input"),
+                .fillMaxWidth()
+                .testTag("pairing_pin_input"),
+            label = { Text("Code (e.g. 4A8B9C or 123456)") },
+            placeholder = { Text("Type the 6 characters from your TV") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Characters,
                 keyboardType = KeyboardType.Ascii,
                 imeAction = ImeAction.Done
             ),
@@ -727,11 +543,11 @@ private fun StepPairingCode(
         )
 
         if (errorMessage != null) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = errorMessage,
                 color = GripRed,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 textAlign = TextAlign.Center
             )
         }
@@ -741,58 +557,47 @@ private fun StepPairingCode(
         TactileButton(
             onClick = onSubmit,
             modifier = Modifier
-                .fillMaxWidth(0.8f)
-                .height(56.dp),
+                .fillMaxWidth()
+                .height(54.dp)
+                .testTag("submit_pairing_code_button"),
             isPrimary = true,
-            text = "CONFIRM & CONNECT",
-            testTag = "submit_pairing_code"
+            enabled = code.length >= 4,
+            text = "Confirm Pairing"
         )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        TactileCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text(
-                    text = "💡 Don't see a code on TV?",
-                    color = GripCyan,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "1. Ensure 'Android TV Remote Service' is enabled under TV Settings > Apps.\n2. Or connect via Bluetooth Mode directly (no code prompt needed).",
-                    color = GripTextSecondary,
-                    fontSize = 12.sp,
-                    lineHeight = 17.sp
-                )
-            }
-        }
     }
 }
 
 @Composable
 private fun StepConnecting(deviceName: String) {
     Column(
-        modifier = Modifier.padding(24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         CircularProgressIndicator(
             color = GripCyan,
-            modifier = Modifier.size(56.dp),
-            strokeWidth = 3.5.dp
+            strokeWidth = 3.dp,
+            modifier = Modifier.size(56.dp)
         )
+
         Spacer(modifier = Modifier.height(20.dp))
+
         Text(
-            text = "Connecting to $deviceName...",
+            text = "Authenticating with $deviceName...",
             color = GripTextPrimary,
             fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
         )
+
         Spacer(modifier = Modifier.height(6.dp))
+
         Text(
-            text = "Establishing secure connection handshake",
+            text = "Verifying cryptographic TLS certificate and registering remote token",
             color = GripTextSecondary,
-            fontSize = 13.sp
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -800,26 +605,33 @@ private fun StepConnecting(deviceName: String) {
 @Composable
 private fun StepTestingCapabilities() {
     Column(
-        modifier = Modifier.padding(24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         CircularProgressIndicator(
             color = GripEmerald,
-            modifier = Modifier.size(56.dp),
-            strokeWidth = 3.5.dp
+            strokeWidth = 3.dp,
+            modifier = Modifier.size(56.dp)
         )
+
         Spacer(modifier = Modifier.height(20.dp))
+
         Text(
-            text = "Calibrating Features...",
+            text = "Verifying TV Capabilities...",
             color = GripTextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold
         )
+
         Spacer(modifier = Modifier.height(6.dp))
+
         Text(
-            text = "Testing D-Pad, Volume, Air Mouse, & Haptic telemetry",
+            text = "Configuring D-pad, media controls, gamepad mode, and keyboard channels",
             color = GripTextSecondary,
-            fontSize = 13.sp
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -840,7 +652,7 @@ private fun StepReady(
             modifier = Modifier
                 .size(72.dp)
                 .clip(CircleShape)
-                .background(GripEmerald.copy(alpha = 0.2f))
+                .background(GripEmerald.copy(alpha = 0.15f))
                 .border(2.dp, GripEmerald, CircleShape),
             contentAlignment = Alignment.Center
         ) {
@@ -848,7 +660,7 @@ private fun StepReady(
                 imageVector = Icons.Default.Check,
                 contentDescription = null,
                 tint = GripEmerald,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(36.dp)
             )
         }
 
@@ -858,28 +670,29 @@ private fun StepReady(
             text = "Connected Successfully!",
             color = GripTextPrimary,
             fontSize = 22.sp,
-            fontWeight = FontWeight.Black
+            fontWeight = FontWeight.Black,
+            textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = device?.name ?: "Your TV is ready to control.",
+            text = "${device?.name ?: "TV"} is paired and ready for full control.",
             color = GripTextSecondary,
-            fontSize = 14.sp
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(28.dp))
 
         TactileButton(
             onClick = onDone,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(54.dp)
+                .testTag("launch_remote_button"),
             isPrimary = true,
-            accentColor = GripEmerald,
-            text = "START CONTROLLING TV",
-            testTag = "pairing_ready_done_button"
+            text = "Open Remote Controller"
         )
     }
 }
@@ -887,33 +700,41 @@ private fun StepReady(
 @Composable
 private fun StepError(
     message: String,
-    onRetry: () -> Unit,
-    onSwitchToBluetooth: () -> Unit
+    onRetry: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(
-            imageVector = Icons.Default.Error,
-            contentDescription = null,
-            tint = GripRed,
-            modifier = Modifier.size(52.dp)
-        )
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(GripRed.copy(alpha = 0.15f))
+                .border(2.dp, GripRed, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Error,
+                contentDescription = null,
+                tint = GripRed,
+                modifier = Modifier.size(36.dp)
+            )
+        }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Wi-Fi Pairing Notice",
+            text = "Pairing Failed",
             color = GripTextPrimary,
             fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         Text(
             text = message,
@@ -923,60 +744,17 @@ private fun StepError(
             lineHeight = 18.sp
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Direct Bluetooth HID Recommendation Card
-        TactileCard(
-            modifier = Modifier.fillMaxWidth(),
-            borderColor = GripCyan.copy(alpha = 0.5f)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Bluetooth,
-                        contentDescription = null,
-                        tint = GripCyan,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Instant Bluetooth Alternative",
-                        color = GripCyan,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = "If your TV blocks Wi-Fi pairing or uses a custom OS, you can pair TVGrip directly as a Bluetooth Remote/Gamepad in 5 seconds without any PIN code prompt.",
-                    color = GripTextSecondary,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                TactileButton(
-                    onClick = onSwitchToBluetooth,
-                    modifier = Modifier.fillMaxWidth(),
-                    isPrimary = true,
-                    icon = Icons.Default.Bluetooth,
-                    text = "USE BLUETOOTH MODE INSTEAD",
-                    testTag = "error_switch_to_bluetooth_btn"
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         TactileButton(
             onClick = onRetry,
-            modifier = Modifier.fillMaxWidth(),
-            text = "RETRY WI-FI PAIRING",
-            accentColor = GripOrangeBright,
-            testTag = "pairing_error_retry_button"
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .testTag("retry_pairing_button"),
+            isPrimary = true,
+            icon = Icons.Default.Refresh,
+            text = "Try Again"
         )
     }
 }

@@ -38,8 +38,8 @@ Directly installable APK available under GitHub Releases:
 ## 🌟 CORE FEATURES & ARCHITECTURE
 
 - 🎛️ **Full Smart TV Remote**: Tactile D-pad, OK, Home, Back, Source Switch, Volume & Media controls.
-- 🔐 **Mutual TLS Pairing (mTLS)**: Real SHA-256 certificate handshake with 6-character PIN exchange on TV screen.
-- 📶 **Bluetooth HID Remote Mode**: Connects directly via Bluetooth Human Interface Device profile as a hardware TV remote without Wi-Fi.
+- 🔐 **Mutual TLS Pairing (mTLS)**: Real SHA-256 certificate handshake with 6-character PIN exchange on TV screen using Google TV Polo Protocol (v2).
+- 📶 **High-Speed Wi-Fi Discovery**: Zero-configuration discovery using mDNS (`_androidtvremote2._tcp`, `_googlecast._tcp`) and subnet sweeps.
 - 🖱️ **Air Mouse & Trackpad**: Point and move your phone to control an on-screen mouse pointer with gyro motion smoothing.
 - 🏎️ **Motion Racing Wheel**: Tilt your phone horizontally to steer in Android TV racing games with progressive throttle/brake.
 - 🎮 **4-Player Gamepad Zone**: Connect up to 4 phones simultaneously as independent gamepads (ABXY, bumpers, triggers, dual analog sticks).
@@ -64,15 +64,14 @@ Directly installable APK available under GitHub Releases:
 ┌──────────────────────────────▼──────────────────────────────┐
 │                    TvConnectionManager                      │
 │      Auto-Reconnect • Latency Diagnostics • Failover        │
-└──────────────┬───────────────────────────────┬──────────────┘
-               │                               │
-┌──────────────▼──────────────┐ ┌──────────────▼──────────────┐
-│   Android TV Remote v2      │ │     Bluetooth HID Engine    │
-│  TLS Socket (Port 6466/6467)│ │   Consumer Control & Mouse  │
-│  Protobuf Key Inject Frames │ │   Direct Hardware HID Mode  │
-└──────────────┬──────────────┘ └──────────────┬──────────────┘
-               │                               │
-               └───────────────┬───────────────┘
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────┐
+│             Android TV Remote v2 (Polo Protocol)            │
+│  • Port 6467: Mutual TLS Pairing & Challenge Auth           │
+│  • Port 6466: Protobuf Command Stream & Remote Sessions     │
+│  • Bouncy Castle X.509 2048-bit RSA Client Authentication    │
+└──────────────────────────────┬──────────────────────────────┘
                                │
                 ┌──────────────▼──────────────┐
                 │       Television Target     │
@@ -82,43 +81,27 @@ Directly installable APK available under GitHub Releases:
 
 ---
 
-## 🔌 PROTOCOL MODES & PAIRING GUIDE
+## 🔌 WI-FI PAIRING GUIDE
 
-### Option 1: Wi-Fi / Local Network (Android TV Remote v2)
 1. Ensure your Android phone and TV are connected to the same Wi-Fi network.
-2. Tap **PAIR A TV** in TVGrip to start mDNS discovery (`_androidtvremote2._tcp`).
-3. Select your TV from the list.
-4. Enter the **6-character PIN** that appears on your TV screen.
-5. TVGrip performs mutual TLS certificate exchange and verifies the connection.
-
-### Option 2: Bluetooth HID Remote (Universal)
-1. Open TVGrip and switch to **Bluetooth HID Mode**.
-2. Put your TV into Bluetooth pairing mode (`Settings` → `Remotes & Accessories` → `Add Accessory`).
-3. Select **TVGrip Remote** from your TV's Bluetooth device list.
-4. Enjoy direct hardware-level control without requiring a shared Wi-Fi network.
+2. Open TVGrip and tap **Scan for TVs** (or enter your TV's IP address directly).
+3. Select your TV from the discovered device list.
+4. Enter the **6-character PIN** displayed on your TV screen.
+5. TVGrip performs mutual TLS cryptographic authentication and establishes a permanent connection.
 
 ---
 
-## 🔧 BUILD FROM SOURCE
+## 🛠️ TECH STACK
 
-```bash
-# 1. Clone repository
-git clone https://github.com/mbir31/TVgrip.git
-cd TVgrip
-
-# 2. Compile APK
-gradle :app:assembleDebug
-
-# 3. Run unit tests
-gradle :app:testDebugUnitTest
-```
+- **Language:** 100% Kotlin
+- **UI:** Jetpack Compose (Material 3 with custom 3D tactile theme)
+- **Cryptography:** Bouncy Castle (`bcpkix-jdk18on`, `bcprov-jdk18on`)
+- **Persistence:** AndroidX Room Database & SharedPreferences
+- **Networking:** Mutual TLS (SSLSocket), NSD (Network Service Discovery), Protobuf Wire Serialization
+- **Sensors:** Accelerometer & Gyroscope sensor fusion with complementary filtering
 
 ---
 
-<div align="center">
+## 📄 LICENSE
 
-Made with love by ©munabbiRMushran🇧🇩
-
-**© mbir31 • TVGrip**
-
-</div>
+TVGrip is distributed under the MIT License.
