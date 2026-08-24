@@ -59,7 +59,13 @@ object SslCertificateManager {
                 val certFactory = CertificateFactory.getInstance("X.509")
                 cert = certFactory.generateCertificate(ByteArrayInputStream(certBytes)) as X509Certificate
                 cert.verify(cert.publicKey)
-                Log.d(TAG, "Loaded persistent client TLS certificate: Subject=${cert.subjectDN}")
+                if (!cert.subjectDN.name.contains("atvremote")) {
+                    Log.d(TAG, "Legacy certificate subject detected (${cert.subjectDN}). Upgrading to CN=atvremote.")
+                    privateKey = null
+                    cert = null
+                } else {
+                    Log.d(TAG, "Loaded persistent client TLS certificate: Subject=${cert.subjectDN}")
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Error restoring saved certificate: ${e.message}. Regenerating.")
                 privateKey = null
@@ -130,14 +136,14 @@ object SslCertificateManager {
             0x05, 0x00
         )
 
-        // Issuer & Subject Name: CN=TVGrip
+        // Issuer & Subject Name: CN=atvremote
         val nameBytes = byteArrayOf(
-            0x30, 0x11,
-            0x31, 0x0F,
-            0x30, 0x0D,
+            0x30, 0x14,
+            0x31, 0x12,
+            0x30, 0x10,
             0x06, 0x03, 0x55, 0x04, 0x03, // id-at-commonName
-            0x0C, 0x06, // UTF8String, length 6
-            0x54, 0x56, 0x47, 0x72, 0x69, 0x70 // "TVGrip"
+            0x0C, 0x09, // UTF8String, length 9
+            0x61, 0x74, 0x76, 0x72, 0x65, 0x6D, 0x6F, 0x74, 0x65 // "atvremote"
         )
 
         // Validity: UTCTime

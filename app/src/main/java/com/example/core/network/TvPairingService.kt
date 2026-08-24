@@ -69,115 +69,102 @@ class TvPairingService(private val context: Context) {
         return withContext(Dispatchers.IO) {
             try {
                 disconnect()
-                // Attempt pairing across ports (6467 primary, 6466 fallback)
-                val primaryPort = if (device.port == 6466 || device.port == 0) 6467 else device.port
-                val portsToTry = listOf(primaryPort, 6467, 6466).distinct()
-                var lastException: Exception? = null
+                val pairingPort = 6467
+                Log.d(TAG, "Starting Android TV Remote v2 pairing handshake to ${device.host}:$pairingPort")
 
-                for (targetPort in portsToTry) {
-                    try {
-                        disconnect()
-                        Log.d(TAG, "Starting Android TV Remote v2 pairing handshake to ${device.host}:$targetPort")
-
-                        val keyManagerFactory = SslCertificateManager.getOrCreateKeyManagerFactory(context)
-                        clientCert = SslCertificateManager.getClientCertificate(context)
-                        if (clientCert == null) {
-                            return@withContext PairingResult.Failed("Failed to initialize client TLS certificate.")
-                        }
-
-                        val sslContext = SSLContext.getInstance("TLS")
-                        var capturedServerCert: X509Certificate? = null
-
-                        val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
-                            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-                            override fun checkClientTrusted(certs: Array<X509Certificate>, authType: String) {}
-                            override fun checkServerTrusted(certs: Array<X509Certificate>, authType: String) {
-                                if (certs.isNotEmpty()) {
-                                    capturedServerCert = certs[0]
-                                }
-                            }
-                        })
-                        sslContext.init(keyManagerFactory.keyManagers, trustAll, SecureRandom())
-
-                        val rawSocket = Socket()
-                        rawSocket.connect(InetSocketAddress(device.host, targetPort), 6000)
-                        rawSocket.tcpNoDelay = true
-                        rawSocket.soTimeout = 10000
-
-                        val sslSocket = sslContext.socketFactory.createSocket(
-                            rawSocket,
-                            device.host,
-                            targetPort,
-                            true
-                        ) as SSLSocket
-                        sslSocket.startHandshake()
-
-                        // Extract peer certificate
-                        if (capturedServerCert == null) {
-                            val peerCerts = sslSocket.session.peerCertificates
-                            if (peerCerts.isNotEmpty() && peerCerts[0] is X509Certificate) {
-                                capturedServerCert = peerCerts[0] as X509Certificate
-                            }
-                        }
-                        serverCert = capturedServerCert
-
-                        pairingSocket = sslSocket
-                        val out = sslSocket.getOutputStream()
-                        val input = sslSocket.getInputStream()
-                        pairingOutput = out
-                        pairingInput = input
-
-                        Log.d(TAG, "TLS handshake successful to port $targetPort. Client: ${clientCert?.subjectDN}, Server: ${serverCert?.subjectDN}")
-
-                        // Step 1: Send PairingRequest (Google TV standard: atvremote)
-                        Log.d(TAG, "Step 1: Sending PairingRequest packet (atvremote)...")
-                        sendPairingRequest(out, clientName = "TVGrip", serviceName = "atvremote")
-
-                        // Step 2: Read TV's PairingResponse (PairingRequestAck & PairingOption)
-                        Log.d(TAG, "Step 2: Awaiting PairingResponse from TV...")
-                        val responseMsg = readAndParseMessage(input)
-                        Log.d(TAG, "Received message from TV: status=${responseMsg.status}, hasReqAck=${responseMsg.hasPairingRequestAck}, hasOptions=${responseMsg.hasPairingOption}, preferredEncoding=${responseMsg.preferredEncodingType}")
-
-                        if (responseMsg.status != STATUS_OK && responseMsg.status != 1) {
-                            disconnect()
-                            continue
-                        }
-
-                        negotiatedEncodingType = responseMsg.preferredEncodingType
-
-                        // Step 3: Send PairingConfiguration
-                        Log.d(TAG, "Step 3: Sending PairingConfiguration (encoding=$negotiatedEncodingType, length=6)...")
-                        sendPairingConfiguration(out, encodingType = negotiatedEncodingType, symbolLength = 6)
-
-                        // Step 4: Read TV's ConfigurationAck
-                        Log.d(TAG, "Step 4: Awaiting ConfigurationAck from TV...")
-                        val configAck = readAndParseMessage(input)
-                        Log.d(TAG, "Received ConfigurationAck from TV: status=${configAck.status}, hasConfigAck=${configAck.hasPairingConfigurationAck}")
-
-                        if (configAck.status != STATUS_OK && configAck.status != 1) {
-                            disconnect()
-                            continue
-                        }
-
-                        Log.d(TAG, "Pairing challenge triggered successfully! TV is displaying pairing code on screen.")
-                        return@withContext PairingResult.CodePromptReceived("Enter the pairing code displayed on your TV screen")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Pairing attempt failed on port $targetPort: ${e.message}")
-                        lastException = e
-                        disconnect()
-                    }
+                val keyManagerFactory = SslCertificateManager.getOrCreateKeyManagerFactory(context)
+                clientCert = SslCertificateManager.getClientCertificate(context)
+                if (clientCert == null) {
+                    return@withContext PairingResult.Failed("Failed to initialize client TLS certificate.")
                 }
 
-                val errDetail = lastException?.let {
-                    when {
-                        it is java.net.ConnectException -> "Connection refused by TV on ports 6467/6466. Ensure TV is powered on."
-                        it is java.net.SocketTimeoutException -> "TV did not respond in time. Please check that both devices are on the same Wi-Fi network."
-                        it is java.io.EOFException -> "TV closed the pairing connection. Please verify TV screen or use Bluetooth Direct HID mode."
-                        else -> it.localizedMessage ?: it.message ?: "Unknown error"
-                    }
-                } ?: "Could not establish secure pairing with TV."
+                val sslContext = SSLContext.getInstance("TLS")
+                var capturedServerCert: X509Certificate? = null
 
-                PairingResult.Failed(errDetail)
+                val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+                    override fun checkClientTrusted(certs: Array<X509Certificate>, authType: String) {}
+                    override fun checkServerTrusted(certs: Array<X509Certificate>, authType: String) {
+                        if (certs.isNotEmpty()) {
+                            capturedServerCert = certs[0]
+                        }
+                    }
+                })
+                sslContext.init(keyManagerFactory.keyManagers, trustAll, SecureRandom())
+
+                val rawSocket = Socket()
+                try {
+                    rawSocket.connect(InetSocketAddress(device.host, pairingPort), 8000)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed connecting to TV pairing port $pairingPort: ${e.message}")
+                    return@withContext PairingResult.Failed(
+                        "Could not connect to TV pairing service on port 6467 (${e.localizedMessage ?: e.message}).\n\n" +
+                        "Troubleshooting tips:\n" +
+                        "• Ensure TV is awake and on the same Wi-Fi network.\n" +
+                        "• Check if your router has AP / Client Isolation turned on.\n" +
+                        "• Or switch to Bluetooth Mode below for instant zero-Wi-Fi connection."
+                    )
+                }
+                rawSocket.tcpNoDelay = true
+                rawSocket.soTimeout = 12000
+
+                val sslSocket = sslContext.socketFactory.createSocket(
+                    rawSocket,
+                    device.host,
+                    pairingPort,
+                    true
+                ) as SSLSocket
+                sslSocket.startHandshake()
+
+                // Extract peer certificate
+                if (capturedServerCert == null) {
+                    val peerCerts = sslSocket.session.peerCertificates
+                    if (peerCerts.isNotEmpty() && peerCerts[0] is X509Certificate) {
+                        capturedServerCert = peerCerts[0] as X509Certificate
+                    }
+                }
+                serverCert = capturedServerCert
+
+                pairingSocket = sslSocket
+                val out = sslSocket.getOutputStream()
+                val input = sslSocket.getInputStream()
+                pairingOutput = out
+                pairingInput = input
+
+                Log.d(TAG, "TLS handshake successful to port $pairingPort. Client: ${clientCert?.subjectDN}, Server: ${serverCert?.subjectDN}")
+
+                // Step 1: Send PairingRequest (Google TV standard: atvremote)
+                Log.d(TAG, "Step 1: Sending PairingRequest packet (atvremote)...")
+                sendPairingRequest(out, clientName = "TVGrip", serviceName = "atvremote")
+
+                // Step 2: Read TV's PairingResponse (PairingRequestAck & PairingOption)
+                Log.d(TAG, "Step 2: Awaiting PairingResponse from TV...")
+                val responseMsg = readAndParseMessage(input)
+                Log.d(TAG, "Received message from TV: status=${responseMsg.status}, hasReqAck=${responseMsg.hasPairingRequestAck}, hasOptions=${responseMsg.hasPairingOption}, preferredEncoding=${responseMsg.preferredEncodingType}")
+
+                if (responseMsg.status != STATUS_OK && responseMsg.status != 1) {
+                    disconnect()
+                    return@withContext PairingResult.Failed("TV rejected pairing request (status ${responseMsg.status}).")
+                }
+
+                negotiatedEncodingType = responseMsg.preferredEncodingType
+
+                // Step 3: Send PairingConfiguration
+                Log.d(TAG, "Step 3: Sending PairingConfiguration (encoding=$negotiatedEncodingType, length=6)...")
+                sendPairingConfiguration(out, encodingType = negotiatedEncodingType, symbolLength = 6)
+
+                // Step 4: Read TV's ConfigurationAck
+                Log.d(TAG, "Step 4: Awaiting ConfigurationAck from TV...")
+                val configAck = readAndParseMessage(input)
+                Log.d(TAG, "Received ConfigurationAck from TV: status=${configAck.status}, hasConfigAck=${configAck.hasPairingConfigurationAck}")
+
+                if (configAck.status != STATUS_OK && configAck.status != 1) {
+                    disconnect()
+                    return@withContext PairingResult.Failed("TV rejected pairing configuration (status ${configAck.status}).")
+                }
+
+                Log.d(TAG, "Pairing challenge triggered successfully! TV is displaying pairing code on screen.")
+                PairingResult.CodePromptReceived("Enter the pairing code displayed on your TV screen")
             } catch (e: Exception) {
                 Log.e(TAG, "Pairing initiation failed with exception: ${e.message}", e)
                 disconnect()
