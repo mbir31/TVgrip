@@ -111,4 +111,16 @@ class TvGripCommandPipelineTest {
         assertEquals("P3", PlayerSlot.PLAYER_3.label)
         assertEquals("P4", PlayerSlot.PLAYER_4.label)
     }
+
+    @Test
+    fun `verify pairing result classes and statuses`() {
+        val prompt = com.example.core.network.PairingResult.CodePromptReceived("Enter PIN")
+        assertEquals("Enter PIN", prompt.promptMessage)
+
+        val success = com.example.core.network.PairingResult.Success("OK")
+        assertEquals("OK", success.message)
+
+        val failed = com.example.core.network.PairingResult.Failed("Error")
+        assertEquals("Error", failed.error)
+    }
 }

@@ -233,7 +233,12 @@ class TvPairingService(private val context: Context) {
     }
 
     /**
-     * Constructs and sends PairingRequest in standard Protobuf format.
+     * Constructs and sends PairingRequest in standard Polo Protobuf format:
+     * OuterMessage:
+     *   1: protocol_version = 2
+     *   2: status = STATUS_OK (200)
+     *   3: type = MESSAGE_TYPE_PAIRING_REQUEST (10)
+     *   4: payload = PairingRequest { 1: service_name, 2: client_name }
      */
     private fun sendPairingRequest(out: OutputStream, clientName: String, serviceName: String) {
         val reqInner = ByteArrayOutputStream()
@@ -244,7 +249,8 @@ class TvPairingService(private val context: Context) {
         val msg = ByteArrayOutputStream()
         writeVarintField(msg, 1, 2) // protocol_version = 2
         writeVarintField(msg, 2, STATUS_OK.toLong()) // status = 200
-        writeLengthDelimitedField(msg, 10, reqBytes) // pairing_request (field 10)
+        writeVarintField(msg, 3, 10) // type = MESSAGE_TYPE_PAIRING_REQUEST (10)
+        writeLengthDelimitedField(msg, 4, reqBytes) // payload (field 4)
         val msgBytes = msg.toByteArray()
 
         val packet = ByteArrayOutputStream()
@@ -256,7 +262,12 @@ class TvPairingService(private val context: Context) {
     }
 
     /**
-     * Constructs and sends PairingConfiguration in standard Protobuf format.
+     * Constructs and sends PairingConfiguration in standard Polo Protobuf format:
+     * OuterMessage:
+     *   1: protocol_version = 2
+     *   2: status = STATUS_OK (200)
+     *   3: type = MESSAGE_TYPE_CONFIGURATION (30)
+     *   4: payload = Configuration { 1: Encoding { 1: type, 2: symbol_length }, 2: client_role = ROLE_TYPE_INPUT (1) }
      */
     private fun sendPairingConfiguration(out: OutputStream, encodingType: Int, symbolLength: Int) {
         val encInner = ByteArrayOutputStream()
@@ -265,14 +276,15 @@ class TvPairingService(private val context: Context) {
         val encBytes = encInner.toByteArray()
 
         val configInner = ByteArrayOutputStream()
-        writeLengthDelimitedField(configInner, 1, encBytes) // encoding
+        writeLengthDelimitedField(configInner, 1, encBytes) // encoding (field 1)
         writeVarintField(configInner, 2, ROLE_TYPE_INPUT.toLong()) // client_role = ROLE_TYPE_INPUT (1)
         val configBytes = configInner.toByteArray()
 
         val msg = ByteArrayOutputStream()
         writeVarintField(msg, 1, 2) // protocol_version = 2
         writeVarintField(msg, 2, STATUS_OK.toLong()) // status = 200
-        writeLengthDelimitedField(msg, 30, configBytes) // pairing_configuration (field 30)
+        writeVarintField(msg, 3, 30) // type = MESSAGE_TYPE_CONFIGURATION (30)
+        writeLengthDelimitedField(msg, 4, configBytes) // payload (field 4)
         val msgBytes = msg.toByteArray()
 
         val packet = ByteArrayOutputStream()
@@ -284,17 +296,23 @@ class TvPairingService(private val context: Context) {
     }
 
     /**
-     * Constructs and sends PairingSecret in standard Protobuf format.
+     * Constructs and sends PairingSecret in standard Polo Protobuf format:
+     * OuterMessage:
+     *   1: protocol_version = 2
+     *   2: status = STATUS_OK (200)
+     *   3: type = MESSAGE_TYPE_SECRET (40)
+     *   4: payload = Secret { 1: secret bytes }
      */
     private fun sendPairingSecret(out: OutputStream, secretHash: ByteArray) {
         val secretInner = ByteArrayOutputStream()
-        writeLengthDelimitedField(secretInner, 1, secretHash) // secret bytes
+        writeLengthDelimitedField(secretInner, 1, secretHash) // secret bytes (field 1)
         val secretBytes = secretInner.toByteArray()
 
         val msg = ByteArrayOutputStream()
         writeVarintField(msg, 1, 2) // protocol_version = 2
         writeVarintField(msg, 2, STATUS_OK.toLong()) // status = 200
-        writeLengthDelimitedField(msg, 40, secretBytes) // pairing_secret (field 40)
+        writeVarintField(msg, 3, 40) // type = MESSAGE_TYPE_SECRET (40)
+        writeLengthDelimitedField(msg, 4, secretBytes) // payload (field 4)
         val msgBytes = msg.toByteArray()
 
         val packet = ByteArrayOutputStream()
@@ -338,11 +356,13 @@ class TvPairingService(private val context: Context) {
     private fun parseProtobufPairingMessage(data: ByteArray): ParsedPairingMessage {
         var version = 2
         var status = STATUS_OK
+        var msgType = 0
         var hasReqAck = false
         var hasOption = false
         var preferredEncoding = ENCODING_TYPE_HEXADECIMAL
         var hasConfigAck = false
         var hasSecretAck = false
+        var payloadBytes: ByteArray? = null
 
         var index = 0
         while (index < data.size) {
@@ -367,8 +387,19 @@ class TvPairingService(private val context: Context) {
                         if ((b and 0x80L) == 0L) break
                         shift += 7
                     }
-                    if (fieldNumber == 1) version = value.toInt()
-                    if (fieldNumber == 2) status = value.toInt()
+                    when (fieldNumber) {
+                        1 -> version = value.toInt()
+                        2 -> status = value.toInt()
+                        3 -> {
+                            msgType = value.toInt()
+                            when (msgType) {
+                                11 -> hasReqAck = true
+                                20 -> hasOption = true
+                                31 -> hasConfigAck = true
+                                41 -> hasSecretAck = true
+                            }
+                        }
+                    }
                 }
                 2 -> { // Length Delimited
                     var len = 0
@@ -385,6 +416,16 @@ class TvPairingService(private val context: Context) {
                     index += len
 
                     when (fieldNumber) {
+                        4 -> {
+                            payloadBytes = subBytes
+                            if (msgType == 20 || msgType == 0) {
+                                val enc = extractEncodingFromOptions(subBytes)
+                                if (enc in 1..3) {
+                                    preferredEncoding = enc
+                                    hasOption = true
+                                }
+                            }
+                        }
                         11 -> hasReqAck = true
                         20 -> {
                             hasOption = true
@@ -400,14 +441,21 @@ class TvPairingService(private val context: Context) {
             }
         }
 
+        if (payloadBytes != null && (hasOption || msgType == 20)) {
+            val enc = extractEncodingFromOptions(payloadBytes)
+            if (enc in 1..3) {
+                preferredEncoding = enc
+            }
+        }
+
         return ParsedPairingMessage(
             protocolVersion = version,
             status = status,
-            hasPairingRequestAck = hasReqAck,
-            hasPairingOption = hasOption,
+            hasPairingRequestAck = hasReqAck || msgType == 11,
+            hasPairingOption = hasOption || msgType == 20,
             preferredEncodingType = preferredEncoding,
-            hasPairingConfigurationAck = hasConfigAck,
-            hasPairingSecretAck = hasSecretAck
+            hasPairingConfigurationAck = hasConfigAck || msgType == 31,
+            hasPairingSecretAck = hasSecretAck || msgType == 41
         )
     }
 
