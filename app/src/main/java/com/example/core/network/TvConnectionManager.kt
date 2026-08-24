@@ -39,6 +39,8 @@ class TvConnectionManager {
     private val _connectionState = MutableStateFlow(DeviceConnectionState.DISCONNECTED)
     val connectionState: StateFlow<DeviceConnectionState> = _connectionState.asStateFlow()
 
+    fun isConnected(): Boolean = _connectionState.value == DeviceConnectionState.CONNECTED
+
     private val _capabilities = MutableStateFlow(CapabilitySet.DEFAULT_ANDROID_TV)
     val capabilities: StateFlow<CapabilitySet> = _capabilities.asStateFlow()
 

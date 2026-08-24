@@ -187,7 +187,7 @@ class PairingViewModel : ViewModel() {
                 }
                 is PairingResult.Failed -> {
                     _errorMessage.value = res.error
-                    _step.value = PairingStep.PAIRING_CODE_INPUT
+                    _step.value = PairingStep.ERROR
                 }
             }
         }
@@ -228,8 +228,18 @@ class PairingViewModel : ViewModel() {
         }
         _step.value = PairingStep.CONNECTING
         viewModelScope.launch {
-            pairingService.confirmPairingCode(code)
-            initiateConnection(device, code)
+            when (val confirmResult = pairingService.confirmPairingCode(code)) {
+                is PairingResult.Success -> {
+                    initiateConnection(device, code)
+                }
+                is PairingResult.Failed -> {
+                    _errorMessage.value = confirmResult.error
+                    _step.value = PairingStep.PAIRING_CODE_INPUT
+                }
+                is PairingResult.CodePromptReceived -> {
+                    _step.value = PairingStep.PAIRING_CODE_INPUT
+                }
+            }
         }
     }
 
