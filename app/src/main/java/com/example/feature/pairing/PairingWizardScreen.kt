@@ -561,7 +561,7 @@ private fun StepPairingCode(
                 .height(54.dp)
                 .testTag("submit_pairing_code_button"),
             isPrimary = true,
-            enabled = code.length >= 4,
+            enabled = code.length == 6,
             text = "Confirm Pairing"
         )
     }

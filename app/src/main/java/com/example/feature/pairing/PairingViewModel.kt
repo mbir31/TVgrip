@@ -134,13 +134,14 @@ class PairingViewModel : ViewModel() {
     }
 
     fun setPairingCode(code: String) {
-        _pairingCode.value = code.uppercase().take(6)
+        val filtered = code.uppercase().filter { it in "0123456789ABCDEF" }.take(6)
+        _pairingCode.value = filtered
     }
 
     fun submitPairingCode() {
         val code = _pairingCode.value.trim()
-        if (code.length < 4) {
-            _errorMessage.value = "Please enter the full pairing code shown on your TV screen."
+        if (code.length != 6) {
+            _errorMessage.value = "Please enter the exact 6-character hexadecimal code shown on your TV screen."
             return
         }
 

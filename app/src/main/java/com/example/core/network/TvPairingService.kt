@@ -5,15 +5,13 @@ import android.util.Log
 import com.example.core.model.TvDevice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
-import java.io.EOFException
-import java.io.InputStream
-import java.io.OutputStream
+import java.math.BigInteger
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
+import java.security.interfaces.RSAPublicKey
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.TrustManager
@@ -26,51 +24,39 @@ sealed class PairingResult {
 }
 
 /**
- * Robust, production-grade Android TV Remote v2 Pairing Service (Polo Protocol).
+ * Protocol-correct Android TV Remote v2 Pairing Service (Polo Protocol).
  * 
- * Accurately implements the Google TV / Android TV Remote v2 Pairing State Machine:
- * 1. Mutual TLS Handshake on port 6467 with persistent client X.509 certificate.
- * 2. Send PairingRequest (service_name="androidtvremote", client_name="TVGrip").
- * 3. Receive PairingRequestAck / PairingOption from TV.
- * 4. Send PairingConfiguration (ENCODING_HEXADECIMAL / ENCODING_NUMERIC, symbol_length=6, role=ROLE_INPUT).
- * 5. Receive PairingConfigurationAck from TV -> TV displays 6-digit challenge code on screen.
- * 6. Compute SHA-256 Secret: Hash(ClientCert.DER + ServerCert.DER + CodeBytes).
- * 7. Send PairingSecret and receive PairingSecretAck (status 200 = Success).
+ * Strict Message Sequence:
+ * 1. Mutual TLS connection on port 6467 (using client certificate CN=atvremote).
+ * 2. OUT: PairingRequest (service_name="atvremote", client_name="TVGrip")
+ * 3. IN:  PairingRequestAck
+ * 4. OUT: Options (preferred_role=ROLE_TYPE_INPUT, input_encodings=[HEXADECIMAL, 6])
+ * 5. IN:  Options
+ * 6. OUT: Configuration (encoding=HEXADECIMAL, 6, client_role=ROLE_TYPE_INPUT)
+ * 7. IN:  ConfigurationAck -> TV displays 6-digit hex PIN
+ * 8. State transitions to WAITING_FOR_TV_CODE
+ * 9. Cryptographic secret computation:
+ *    SHA-256(client_modulus + client_exponent + server_modulus + server_exponent + PIN_bytes[2:])
+ *    Verification: hashResult[0] == PIN_bytes[0..1]
+ * 10. OUT: Secret (hashResult)
+ * 11. IN:  SecretAck
+ * 12. PAIRING_SUCCESS -> Remote session connects on port 6466
  */
 class TvPairingService(private val context: Context) {
 
     private val TAG = "TvPairingService"
     private var pairingSocket: SSLSocket? = null
-    private var pairingOutput: OutputStream? = null
-    private var pairingInput: InputStream? = null
     private var clientCert: X509Certificate? = null
     private var serverCert: X509Certificate? = null
-    private var negotiatedEncodingType: Int = 3 // 3 = HEXADECIMAL, 2 = NUMERIC, 1 = ALPHANUMERIC
+    private var negotiatedEncoding: PoloProtocol.EncodingType = PoloProtocol.EncodingType.ENCODING_TYPE_HEXADECIMAL
+    private var negotiatedSymbolLength: Int = 6
 
-    companion object {
-        const val STATUS_OK = 200
-        const val STATUS_ERROR = 400
-        const val STATUS_BAD_CONFIGURATION = 401
-        const val STATUS_BAD_SECRET = 402
-
-        const val ENCODING_TYPE_ALPHANUMERIC = 1
-        const val ENCODING_TYPE_NUMERIC = 2
-        const val ENCODING_TYPE_HEXADECIMAL = 3
-
-        const val ROLE_TYPE_INPUT = 1
-        const val ROLE_TYPE_OUTPUT = 2
-    }
-
-    /**
-     * Initiates the pairing handshake on port 6467.
-     * Completes steps 1-5, causing the TV to display the pairing code on its screen.
-     */
     suspend fun startPairing(device: TvDevice): PairingResult {
         return withContext(Dispatchers.IO) {
             try {
                 disconnect()
                 val pairingPort = 6467
-                Log.d(TAG, "Starting Android TV Remote v2 pairing handshake to ${device.host}:$pairingPort")
+                Log.d(TAG, "CONNECTING_PAIRING to ${device.host}:$pairingPort")
 
                 val keyManagerFactory = SslCertificateManager.getOrCreateKeyManagerFactory(context)
                 clientCert = SslCertificateManager.getClientCertificate(context)
@@ -81,7 +67,7 @@ class TvPairingService(private val context: Context) {
                 val sslContext = SSLContext.getInstance("TLS")
                 var capturedServerCert: X509Certificate? = null
 
-                val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+                val trustManager = arrayOf<TrustManager>(object : X509TrustManager {
                     override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
                     override fun checkClientTrusted(certs: Array<X509Certificate>, authType: String) {}
                     override fun checkServerTrusted(certs: Array<X509Certificate>, authType: String) {
@@ -90,23 +76,22 @@ class TvPairingService(private val context: Context) {
                         }
                     }
                 })
-                sslContext.init(keyManagerFactory.keyManagers, trustAll, SecureRandom())
+                sslContext.init(keyManagerFactory.keyManagers, trustManager, SecureRandom())
 
                 val rawSocket = Socket()
                 try {
                     rawSocket.connect(InetSocketAddress(device.host, pairingPort), 8000)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed connecting to TV pairing port $pairingPort: ${e.message}")
+                    Log.e(TAG, "Connection to ${device.host}:$pairingPort failed: ${e.message}")
                     return@withContext PairingResult.Failed(
                         "Could not connect to TV pairing service on port 6467 (${e.localizedMessage ?: e.message}).\n\n" +
-                        "Troubleshooting tips:\n" +
-                        "• Ensure TV is awake and on the same Wi-Fi network.\n" +
-                        "• Check if your router has AP / Client Isolation turned on.\n" +
-                        "• Or switch to Bluetooth Mode below for instant zero-Wi-Fi connection."
+                        "Troubleshooting:\n" +
+                        "• Confirm the TV is on and connected to the same Wi-Fi network.\n" +
+                        "• Ensure Client Isolation / AP Isolation is disabled on your router."
                     )
                 }
                 rawSocket.tcpNoDelay = true
-                rawSocket.soTimeout = 12000
+                rawSocket.soTimeout = 20000
 
                 val sslSocket = sslContext.socketFactory.createSocket(
                     rawSocket,
@@ -116,7 +101,6 @@ class TvPairingService(private val context: Context) {
                 ) as SSLSocket
                 sslSocket.startHandshake()
 
-                // Extract peer certificate
                 if (capturedServerCert == null) {
                     val peerCerts = sslSocket.session.peerCertificates
                     if (peerCerts.isNotEmpty() && peerCerts[0] is X509Certificate) {
@@ -124,49 +108,109 @@ class TvPairingService(private val context: Context) {
                     }
                 }
                 serverCert = capturedServerCert
-
                 pairingSocket = sslSocket
-                val out = sslSocket.getOutputStream()
+
+                Log.d(TAG, "TLS_CONNECTED on port $pairingPort. Client: ${clientCert?.subjectDN}, Server: ${serverCert?.subjectDN}")
+
+                val output = sslSocket.getOutputStream()
                 val input = sslSocket.getInputStream()
-                pairingOutput = out
-                pairingInput = input
 
-                Log.d(TAG, "TLS handshake successful to port $pairingPort. Client: ${clientCert?.subjectDN}, Server: ${serverCert?.subjectDN}")
+                // ==========================================
+                // PHASE 1: PAIRING REQUEST
+                // ==========================================
+                Log.d(TAG, "[OUT] PairingRequest: service_name=atvremote, client_name=TVGrip")
+                val pairingRequestMsg = PoloProtocol.OuterMessage(
+                    protocolVersion = 2,
+                    status = PoloProtocol.Status.STATUS_OK,
+                    pairingRequest = PoloProtocol.PairingRequest(
+                        serviceName = "atvremote",
+                        clientName = "TVGrip"
+                    )
+                )
+                output.write(pairingRequestMsg.encode())
+                output.flush()
 
-                // Step 1: Send PairingRequest (Google TV standard: atvremote)
-                Log.d(TAG, "Step 1: Sending PairingRequest packet (atvremote)...")
-                sendPairingRequest(out, clientName = "TVGrip", serviceName = "atvremote")
-
-                // Step 2: Read TV's PairingResponse (PairingRequestAck & PairingOption)
-                Log.d(TAG, "Step 2: Awaiting PairingResponse from TV...")
-                val responseMsg = readAndParseMessage(input)
-                Log.d(TAG, "Received message from TV: status=${responseMsg.status}, hasReqAck=${responseMsg.hasPairingRequestAck}, hasOptions=${responseMsg.hasPairingOption}, preferredEncoding=${responseMsg.preferredEncodingType}")
-
-                if (responseMsg.status != STATUS_OK && responseMsg.status != 1) {
+                val ackMsg = PoloProtocol.readFramedMessage(input)
+                Log.d(TAG, "[IN] PairingRequestAck: status=${ackMsg.status}, hasAck=${ackMsg.pairingRequestAck != null}")
+                if (ackMsg.status != PoloProtocol.Status.STATUS_OK && ackMsg.pairingRequestAck == null) {
                     disconnect()
-                    return@withContext PairingResult.Failed("TV rejected pairing request (status ${responseMsg.status}).")
+                    return@withContext PairingResult.Failed("TV rejected pairing request with status ${ackMsg.status}.")
                 }
 
-                negotiatedEncodingType = responseMsg.preferredEncodingType
+                // ==========================================
+                // PHASE 2: OPTIONS NEGOTIATION (CLIENT OPTIONS)
+                // ==========================================
+                Log.d(TAG, "[OUT] Options: preferred_role=ROLE_TYPE_INPUT, input_encodings=[HEXADECIMAL, 6]")
+                val clientOptionsMsg = PoloProtocol.OuterMessage(
+                    protocolVersion = 2,
+                    status = PoloProtocol.Status.STATUS_OK,
+                    options = PoloProtocol.Options(
+                        preferredRole = PoloProtocol.RoleType.ROLE_TYPE_INPUT,
+                        inputEncodings = listOf(
+                            PoloProtocol.Encoding(
+                                type = PoloProtocol.EncodingType.ENCODING_TYPE_HEXADECIMAL,
+                                symbolLength = 6
+                            )
+                        )
+                    )
+                )
+                output.write(clientOptionsMsg.encode())
+                output.flush()
 
-                // Step 3: Send PairingConfiguration
-                Log.d(TAG, "Step 3: Sending PairingConfiguration (encoding=$negotiatedEncodingType, length=6)...")
-                sendPairingConfiguration(out, encodingType = negotiatedEncodingType, symbolLength = 6)
-
-                // Step 4: Read TV's ConfigurationAck
-                Log.d(TAG, "Step 4: Awaiting ConfigurationAck from TV...")
-                val configAck = readAndParseMessage(input)
-                Log.d(TAG, "Received ConfigurationAck from TV: status=${configAck.status}, hasConfigAck=${configAck.hasPairingConfigurationAck}")
-
-                if (configAck.status != STATUS_OK && configAck.status != 1) {
+                // ==========================================
+                // PHASE 3: RECEIVE TV OPTIONS
+                // ==========================================
+                val tvOptionsMsg = PoloProtocol.readFramedMessage(input)
+                Log.d(TAG, "[IN] Options: status=${tvOptionsMsg.status}, hasOptions=${tvOptionsMsg.options != null}")
+                if (tvOptionsMsg.status != PoloProtocol.Status.STATUS_OK && tvOptionsMsg.options == null) {
                     disconnect()
-                    return@withContext PairingResult.Failed("TV rejected pairing configuration (status ${configAck.status}).")
+                    return@withContext PairingResult.Failed("TV rejected options negotiation (status ${tvOptionsMsg.status}).")
                 }
 
-                Log.d(TAG, "Pairing challenge triggered successfully! TV is displaying pairing code on screen.")
-                PairingResult.CodePromptReceived("Enter the pairing code displayed on your TV screen")
+                val tvOptions = tvOptionsMsg.options
+                if (tvOptions != null) {
+                    val matchingEncoding = tvOptions.inputEncodings.firstOrNull {
+                        it.type == PoloProtocol.EncodingType.ENCODING_TYPE_HEXADECIMAL
+                    } ?: tvOptions.inputEncodings.firstOrNull()
+
+                    if (matchingEncoding != null) {
+                        negotiatedEncoding = matchingEncoding.type
+                        negotiatedSymbolLength = matchingEncoding.symbolLength.coerceIn(4, 16)
+                    }
+                }
+
+                // ==========================================
+                // PHASE 4: SEND CONFIGURATION
+                // ==========================================
+                Log.d(TAG, "[OUT] Configuration: encoding=$negotiatedEncoding, symbol_length=$negotiatedSymbolLength, client_role=ROLE_TYPE_INPUT")
+                val configMsg = PoloProtocol.OuterMessage(
+                    protocolVersion = 2,
+                    status = PoloProtocol.Status.STATUS_OK,
+                    configuration = PoloProtocol.Configuration(
+                        encoding = PoloProtocol.Encoding(
+                            type = negotiatedEncoding,
+                            symbolLength = negotiatedSymbolLength
+                        ),
+                        clientRole = PoloProtocol.RoleType.ROLE_TYPE_INPUT
+                    )
+                )
+                output.write(configMsg.encode())
+                output.flush()
+
+                // ==========================================
+                // PHASE 5: PAIRING CODE TRIGGER & CONFIG ACK
+                // ==========================================
+                val configAckMsg = PoloProtocol.readFramedMessage(input)
+                Log.d(TAG, "[IN] ConfigurationAck: status=${configAckMsg.status}, hasConfigAck=${configAckMsg.configurationAck != null}")
+                if (configAckMsg.status != PoloProtocol.Status.STATUS_OK && configAckMsg.configurationAck == null) {
+                    disconnect()
+                    return@withContext PairingResult.Failed("TV rejected pairing configuration (status ${configAckMsg.status}).")
+                }
+
+                Log.d(TAG, "WAITING_FOR_TV_CODE — TV is now displaying the pairing PIN.")
+                PairingResult.CodePromptReceived("Enter the 6-character code shown on your TV screen")
             } catch (e: Exception) {
-                Log.e(TAG, "Pairing initiation failed with exception: ${e.message}", e)
+                Log.e(TAG, "Pairing handshake failed: ${e.message}", e)
                 disconnect()
                 PairingResult.Failed("Could not trigger pairing code on TV: ${e.localizedMessage ?: e.message}")
             }
@@ -174,388 +218,121 @@ class TvPairingService(private val context: Context) {
     }
 
     /**
-     * Submits the user-entered PIN to complete authentication with the TV.
+     * Submits the user-entered 6-character PIN and completes the cryptographic Polo handshake.
      */
     suspend fun confirmPairingCode(code: String): PairingResult {
         return withContext(Dispatchers.IO) {
             try {
                 val cleanCode = code.trim().uppercase()
-                val out = pairingOutput
-                val input = pairingInput
+                if (cleanCode.length != 6 || !cleanCode.all { it in "0123456789ABCDEF" }) {
+                    return@withContext PairingResult.Failed("Invalid code format. Please enter the exact 6 hexadecimal characters shown on your TV.")
+                }
+
+                val socket = pairingSocket
                 val cCert = clientCert
                 val sCert = serverCert
 
-                if (out == null || input == null || cCert == null || sCert == null) {
+                if (socket == null || cCert == null || sCert == null || socket.isClosed) {
                     disconnect()
-                    return@withContext PairingResult.Failed("Pairing session expired or not connected. Please restart pairing.")
+                    return@withContext PairingResult.Failed("Pairing session expired. Please restart pairing.")
                 }
 
-                Log.d(TAG, "Computing SHA-256 Secret for code '$cleanCode' (Encoding=$negotiatedEncodingType)...")
+                val clientPubKey = cCert.publicKey as? RSAPublicKey
+                    ?: return@withContext PairingResult.Failed("Invalid client RSA public key.")
+                val serverPubKey = sCert.publicKey as? RSAPublicKey
+                    ?: return@withContext PairingResult.Failed("Invalid TV server RSA public key.")
 
-                // Determine secret payload bytes based on negotiated encoding
-                val secretBytes: ByteArray = if (negotiatedEncodingType == ENCODING_TYPE_HEXADECIMAL) {
-                    parseHexOrUtf8(cleanCode)
-                } else {
-                    cleanCode.toByteArray(Charsets.UTF_8)
-                }
+                // ==========================================
+                // PHASE 7: CORRECT POLO PAIRING SECRET CALCULATION
+                // ==========================================
+                val clientModulus = clientPubKey.modulus.toUnsignedByteArray()
+                val clientExponent = clientPubKey.publicExponent.toUnsignedByteArray()
+                val serverModulus = serverPubKey.modulus.toUnsignedByteArray()
+                val serverExponent = serverPubKey.publicExponent.toUnsignedByteArray()
 
-                // Compute Secret SHA-256 Digest: SHA256(ClientCert.DER + ServerCert.DER + SecretBytes)
+                // Code remainder bytes (excluding the first two characters)
+                val codeRemainderHex = cleanCode.substring(2)
+                val codeRemainderBytes = hexToBytes(codeRemainderHex)
+
                 val digest = MessageDigest.getInstance("SHA-256")
-                digest.update(cCert.encoded)
-                digest.update(sCert.encoded)
-                digest.update(secretBytes)
-                val hashBytes = digest.digest()
+                digest.update(clientModulus)
+                digest.update(clientExponent)
+                digest.update(serverModulus)
+                digest.update(serverExponent)
+                digest.update(codeRemainderBytes)
+                val hashResult = digest.digest()
 
-                Log.d(TAG, "Step 5: Sending PairingSecret (${hashBytes.size} bytes)...")
-                sendPairingSecret(out, hashBytes)
+                val expectedFirstByte = cleanCode.substring(0, 2).toInt(16).toByte()
+                if (hashResult[0] != expectedFirstByte) {
+                    Log.w(TAG, "PIN signature verification failed: hash[0]=${hashResult[0]}, expected=$expectedFirstByte")
+                    return@withContext PairingResult.Failed("Invalid pairing code. The PIN entered does not match the TV's cryptographic challenge.")
+                }
 
-                Log.d(TAG, "Step 6: Awaiting PairingSecretAck from TV...")
-                val secretAck = readAndParseMessage(input)
-                Log.d(TAG, "Received SecretAck from TV: status=${secretAck.status}, hasSecretAck=${secretAck.hasPairingSecretAck}")
+                // ==========================================
+                // PHASE 8: SEND SECRET
+                // ==========================================
+                Log.d(TAG, "[OUT] Secret: sending SHA-256 digest")
+                val output = socket.getOutputStream()
+                val input = socket.getInputStream()
 
-                if (secretAck.status == STATUS_OK || secretAck.status == 1 || secretAck.hasPairingSecretAck) {
-                    Log.d(TAG, "TV pairing completed and verified successfully!")
+                val secretMsg = PoloProtocol.OuterMessage(
+                    protocolVersion = 2,
+                    status = PoloProtocol.Status.STATUS_OK,
+                    secret = PoloProtocol.Secret(secret = hashResult)
+                )
+                output.write(secretMsg.encode())
+                output.flush()
+
+                // ==========================================
+                // PHASE 9: SECRET ACK
+                // ==========================================
+                val secretAckMsg = PoloProtocol.readFramedMessage(input)
+                Log.d(TAG, "[IN] SecretAck: status=${secretAckMsg.status}, hasSecretAck=${secretAckMsg.secretAck != null}")
+
+                if (secretAckMsg.status == PoloProtocol.Status.STATUS_OK || secretAckMsg.secretAck != null) {
+                    Log.d(TAG, "PAIRING_SUCCESS — TV successfully paired and authenticated.")
                     disconnect()
-                    PairingResult.Success("TV successfully paired and authenticated!")
+                    PairingResult.Success("TV successfully paired and verified!")
                 } else {
-                    Log.w(TAG, "TV rejected pairing secret with status ${secretAck.status}")
+                    Log.w(TAG, "TV rejected pairing secret with status ${secretAckMsg.status}")
                     disconnect()
-                    PairingResult.Failed("Pairing code incorrect or expired (Status ${secretAck.status}). Please try again.")
+                    PairingResult.Failed("TV rejected pairing secret (status ${secretAckMsg.status}). Please try again.")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Pairing secret verification failed: ${e.message}", e)
+                Log.e(TAG, "Error confirming pairing PIN: ${e.message}", e)
                 disconnect()
                 PairingResult.Failed("Failed to confirm pairing code: ${e.localizedMessage ?: e.message}")
             }
         }
     }
 
-    private fun parseHexOrUtf8(code: String): ByteArray {
-        return try {
-            val hexClean = code.filter { it in "0123456789ABCDEFabcdef" }
-            if (hexClean.length % 2 == 0 && hexClean.isNotEmpty()) {
-                hexClean.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-            } else {
-                code.toByteArray(Charsets.UTF_8)
-            }
-        } catch (e: Exception) {
-            code.toByteArray(Charsets.UTF_8)
+    private fun BigInteger.toUnsignedByteArray(): ByteArray {
+        val array = this.toByteArray()
+        return if (array.isNotEmpty() && array[0] == 0.toByte()) {
+            array.copyOfRange(1, array.size)
+        } else {
+            array
         }
     }
 
-    /**
-     * Constructs and sends PairingRequest in standard Polo Protobuf format:
-     * OuterMessage:
-     *   1: protocol_version = 2
-     *   2: status = STATUS_OK (200)
-     *   3: type = MESSAGE_TYPE_PAIRING_REQUEST (10)
-     *   4: payload = PairingRequest { 1: service_name, 2: client_name }
-     */
-    private fun sendPairingRequest(out: OutputStream, clientName: String, serviceName: String) {
-        val reqInner = ByteArrayOutputStream()
-        writeStringField(reqInner, 1, serviceName) // service_name
-        writeStringField(reqInner, 2, clientName)  // client_name
-        val reqBytes = reqInner.toByteArray()
-
-        val msg = ByteArrayOutputStream()
-        writeVarintField(msg, 1, 2) // protocol_version = 2
-        writeVarintField(msg, 2, STATUS_OK.toLong()) // status = 200
-        writeVarintField(msg, 3, 10) // type = MESSAGE_TYPE_PAIRING_REQUEST (10)
-        writeLengthDelimitedField(msg, 4, reqBytes) // payload (field 4)
-        val msgBytes = msg.toByteArray()
-
-        val packet = ByteArrayOutputStream()
-        writeVarint(packet, msgBytes.size.toLong())
-        packet.write(msgBytes)
-
-        out.write(packet.toByteArray())
-        out.flush()
-    }
-
-    /**
-     * Constructs and sends PairingConfiguration in standard Polo Protobuf format:
-     * OuterMessage:
-     *   1: protocol_version = 2
-     *   2: status = STATUS_OK (200)
-     *   3: type = MESSAGE_TYPE_CONFIGURATION (30)
-     *   4: payload = Configuration { 1: Encoding { 1: type, 2: symbol_length }, 2: client_role = ROLE_TYPE_INPUT (1) }
-     */
-    private fun sendPairingConfiguration(out: OutputStream, encodingType: Int, symbolLength: Int) {
-        val encInner = ByteArrayOutputStream()
-        writeVarintField(encInner, 1, encodingType.toLong()) // type
-        writeVarintField(encInner, 2, symbolLength.toLong()) // symbol_length
-        val encBytes = encInner.toByteArray()
-
-        val configInner = ByteArrayOutputStream()
-        writeLengthDelimitedField(configInner, 1, encBytes) // encoding (field 1)
-        writeVarintField(configInner, 2, ROLE_TYPE_INPUT.toLong()) // client_role = ROLE_TYPE_INPUT (1)
-        val configBytes = configInner.toByteArray()
-
-        val msg = ByteArrayOutputStream()
-        writeVarintField(msg, 1, 2) // protocol_version = 2
-        writeVarintField(msg, 2, STATUS_OK.toLong()) // status = 200
-        writeVarintField(msg, 3, 30) // type = MESSAGE_TYPE_CONFIGURATION (30)
-        writeLengthDelimitedField(msg, 4, configBytes) // payload (field 4)
-        val msgBytes = msg.toByteArray()
-
-        val packet = ByteArrayOutputStream()
-        writeVarint(packet, msgBytes.size.toLong())
-        packet.write(msgBytes)
-
-        out.write(packet.toByteArray())
-        out.flush()
-    }
-
-    /**
-     * Constructs and sends PairingSecret in standard Polo Protobuf format:
-     * OuterMessage:
-     *   1: protocol_version = 2
-     *   2: status = STATUS_OK (200)
-     *   3: type = MESSAGE_TYPE_SECRET (40)
-     *   4: payload = Secret { 1: secret bytes }
-     */
-    private fun sendPairingSecret(out: OutputStream, secretHash: ByteArray) {
-        val secretInner = ByteArrayOutputStream()
-        writeLengthDelimitedField(secretInner, 1, secretHash) // secret bytes (field 1)
-        val secretBytes = secretInner.toByteArray()
-
-        val msg = ByteArrayOutputStream()
-        writeVarintField(msg, 1, 2) // protocol_version = 2
-        writeVarintField(msg, 2, STATUS_OK.toLong()) // status = 200
-        writeVarintField(msg, 3, 40) // type = MESSAGE_TYPE_SECRET (40)
-        writeLengthDelimitedField(msg, 4, secretBytes) // payload (field 4)
-        val msgBytes = msg.toByteArray()
-
-        val packet = ByteArrayOutputStream()
-        writeVarint(packet, msgBytes.size.toLong())
-        packet.write(msgBytes)
-
-        out.write(packet.toByteArray())
-        out.flush()
-    }
-
-    /**
-     * Reads a varint-framed message from the stream and parses its fields.
-     */
-    private fun readAndParseMessage(input: InputStream): ParsedPairingMessage {
-        val payload = readFramedPacket(input)
-        return parseProtobufPairingMessage(payload)
-    }
-
-    private fun readFramedPacket(input: InputStream): ByteArray {
-        var length = 0
-        var shift = 0
-        while (true) {
-            val b = input.read()
-            if (b == -1) throw EOFException("End of stream reading length prefix")
-            length = length or ((b and 0x7F) shl shift)
-            if ((b and 0x80) == 0) break
-            shift += 7
-            if (shift > 28) throw IllegalArgumentException("Varint message length too large")
+    private fun hexToBytes(hex: String): ByteArray {
+        val clean = hex.filter { it in "0123456789ABCDEFabcdef" }
+        val result = ByteArray(clean.length / 2)
+        for (i in 0 until clean.length step 2) {
+            result[i / 2] = clean.substring(i, i + 2).toInt(16).toByte()
         }
-
-        val buffer = ByteArray(length)
-        var totalRead = 0
-        while (totalRead < length) {
-            val read = input.read(buffer, totalRead, length - totalRead)
-            if (read == -1) throw EOFException("End of stream reading payload of size $length")
-            totalRead += read
-        }
-        return buffer
-    }
-
-    private fun parseProtobufPairingMessage(data: ByteArray): ParsedPairingMessage {
-        var version = 2
-        var status = STATUS_OK
-        var msgType = 0
-        var hasReqAck = false
-        var hasOption = false
-        var preferredEncoding = ENCODING_TYPE_HEXADECIMAL
-        var hasConfigAck = false
-        var hasSecretAck = false
-        var payloadBytes: ByteArray? = null
-
-        var index = 0
-        while (index < data.size) {
-            var tag = 0
-            var shift = 0
-            while (index < data.size) {
-                val b = data[index++].toInt() and 0xFF
-                tag = tag or ((b and 0x7F) shl shift)
-                if ((b and 0x80) == 0) break
-                shift += 7
-            }
-            val fieldNumber = tag ushr 3
-            val wireType = tag and 0x07
-
-            when (wireType) {
-                0 -> { // Varint
-                    var value = 0L
-                    shift = 0
-                    while (index < data.size) {
-                        val b = data[index++].toLong() and 0xFFL
-                        value = value or ((b and 0x7FL) shl shift)
-                        if ((b and 0x80L) == 0L) break
-                        shift += 7
-                    }
-                    when (fieldNumber) {
-                        1 -> version = value.toInt()
-                        2 -> status = value.toInt()
-                        3 -> {
-                            msgType = value.toInt()
-                            when (msgType) {
-                                11 -> hasReqAck = true
-                                20 -> hasOption = true
-                                31 -> hasConfigAck = true
-                                41 -> hasSecretAck = true
-                            }
-                        }
-                    }
-                }
-                2 -> { // Length Delimited
-                    var len = 0
-                    shift = 0
-                    while (index < data.size) {
-                        val b = data[index++].toInt() and 0xFF
-                        len = len or ((b and 0x7F) shl shift)
-                        if ((b and 0x80) == 0) break
-                        shift += 7
-                    }
-                    val subBytes = if (index + len <= data.size) {
-                        data.copyOfRange(index, index + len)
-                    } else ByteArray(0)
-                    index += len
-
-                    when (fieldNumber) {
-                        4 -> {
-                            payloadBytes = subBytes
-                            if (msgType == 20 || msgType == 0) {
-                                val enc = extractEncodingFromOptions(subBytes)
-                                if (enc in 1..3) {
-                                    preferredEncoding = enc
-                                    hasOption = true
-                                }
-                            }
-                        }
-                        11 -> hasReqAck = true
-                        20 -> {
-                            hasOption = true
-                            preferredEncoding = extractEncodingFromOptions(subBytes)
-                        }
-                        31 -> hasConfigAck = true
-                        41 -> hasSecretAck = true
-                    }
-                }
-                1 -> index += 8
-                5 -> index += 4
-                else -> break
-            }
-        }
-
-        if (payloadBytes != null && (hasOption || msgType == 20)) {
-            val enc = extractEncodingFromOptions(payloadBytes)
-            if (enc in 1..3) {
-                preferredEncoding = enc
-            }
-        }
-
-        return ParsedPairingMessage(
-            protocolVersion = version,
-            status = status,
-            hasPairingRequestAck = hasReqAck || msgType == 11,
-            hasPairingOption = hasOption || msgType == 20,
-            preferredEncodingType = preferredEncoding,
-            hasPairingConfigurationAck = hasConfigAck || msgType == 31,
-            hasPairingSecretAck = hasSecretAck || msgType == 41
-        )
-    }
-
-    private fun extractEncodingFromOptions(data: ByteArray): Int {
-        var foundEncoding = ENCODING_TYPE_HEXADECIMAL
-        var index = 0
-        while (index < data.size) {
-            val b = data[index++].toInt() and 0xFF
-            val fieldNumber = b ushr 3
-            val wireType = b and 0x07
-            if (wireType == 2) {
-                var len = 0
-                var shift = 0
-                while (index < data.size) {
-                    val lb = data[index++].toInt() and 0xFF
-                    len = len or ((lb and 0x7F) shl shift)
-                    if ((lb and 0x80) == 0) break
-                    shift += 7
-                }
-                val sub = if (index + len <= data.size) data.copyOfRange(index, index + len) else ByteArray(0)
-                index += len
-                if (sub.isNotEmpty() && sub[0] == 0x08.toByte() && sub.size >= 2) {
-                    val encType = sub[1].toInt()
-                    if (encType in 1..3) {
-                        foundEncoding = encType
-                    }
-                }
-            } else if (wireType == 0) {
-                while (index < data.size && (data[index++].toInt() and 0x80) != 0) {}
-            } else {
-                break
-            }
-        }
-        return foundEncoding
-    }
-
-    // --- Protobuf serialization utilities ---
-
-    private fun writeVarint(out: OutputStream, value: Long) {
-        var v = value
-        while (v and 0x7FL.inv() != 0L) {
-            out.write(((v and 0x7F) or 0x80).toInt())
-            v = v ushr 7
-        }
-        out.write((v and 0x7F).toInt())
-    }
-
-    private fun writeTag(out: OutputStream, fieldNumber: Int, wireType: Int) {
-        writeVarint(out, ((fieldNumber shl 3) or wireType).toLong())
-    }
-
-    private fun writeVarintField(out: OutputStream, fieldNumber: Int, value: Long) {
-        writeTag(out, fieldNumber, 0)
-        writeVarint(out, value)
-    }
-
-    private fun writeLengthDelimitedField(out: OutputStream, fieldNumber: Int, bytes: ByteArray) {
-        writeTag(out, fieldNumber, 2)
-        writeVarint(out, bytes.size.toLong())
-        out.write(bytes)
-    }
-
-    private fun writeStringField(out: OutputStream, fieldNumber: Int, str: String) {
-        writeLengthDelimitedField(out, fieldNumber, str.toByteArray(Charsets.UTF_8))
+        return result
     }
 
     fun disconnect() {
         try {
-            pairingOutput?.close()
-            pairingInput?.close()
             pairingSocket?.close()
         } catch (e: Exception) {
-            Log.w(TAG, "Socket cleanup error: ${e.message}")
+            Log.w(TAG, "Error closing pairing socket: ${e.message}")
         } finally {
-            pairingOutput = null
-            pairingInput = null
             pairingSocket = null
             serverCert = null
             clientCert = null
         }
     }
 }
-
-private data class ParsedPairingMessage(
-    val protocolVersion: Int = 2,
-    val status: Int = 200,
-    val hasPairingRequestAck: Boolean = false,
-    val hasPairingOption: Boolean = false,
-    val preferredEncodingType: Int = 3,
-    val hasPairingConfigurationAck: Boolean = false,
-    val hasPairingSecretAck: Boolean = false
-)
