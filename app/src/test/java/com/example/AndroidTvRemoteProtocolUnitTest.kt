@@ -5,16 +5,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.security.MessageDigest
+import java.io.ByteArrayOutputStream
 
 /**
- * Unit tests for the Android TV Remote v2 wire decoder. These verify parser
- * behaviour against the real RemoteMessage tags from the protocol reference.
+ * Wire-level tests for the Android TV Remote v2 message decoder. They use the
+ * same field numbers/wire tags as the tronikos/androidtvremote2 reference.
  */
 class AndroidTvRemoteProtocolUnitTest {
 
     private fun varint(value: Int): ByteArray {
-        val out = java.io.ByteArrayOutputStream()
+        val out = ByteArrayOutputStream()
         var v = value
         while (v and 0x7F.inv() != 0) {
             out.write(((v and 0x7F) or 0x80))
@@ -27,7 +27,7 @@ class AndroidTvRemoteProtocolUnitTest {
     private fun tag(field: Int, wire: Int): ByteArray = varint((field shl 3) or wire)
 
     private fun lengthDelimited(field: Int, payload: ByteArray): ByteArray {
-        val out = java.io.ByteArrayOutputStream()
+        val out = ByteArrayOutputStream()
         out.write(tag(field, 2))
         out.write(varint(payload.size))
         out.write(payload)
@@ -36,65 +36,58 @@ class AndroidTvRemoteProtocolUnitTest {
 
     @Test
     fun `decodes remote configure code1`() {
-        // RemoteMessage.remote_configure (field 1) -> RemoteConfigure.code1 = 615
-        // The nested RemoteConfigure payload begins with its own field 1 varint tag.
+        // RemoteMessage.remote_configure (field 1) -> RemoteConfigure.code1 = 615.
         val configurePayload = byteArrayOf(0x08) + varint(615)
-        val configure = lengthDelimited(1, configurePayload)
-        val parsed = RemoteMessageDecoder.decode(configure)
+        val parsed = RemoteMessageDecoder.decode(lengthDelimited(1, configurePayload))
         assertTrue(parsed.hasConfigure)
         assertEquals(615, parsed.configureCode1)
     }
 
     @Test
-    fun `decodes remote start as nested message`() {
-        // RemoteMessage.remote_start (field 40) -> RemoteStart.started = true
+    fun `decodes remote start as nested boolean message`() {
+        // RemoteMessage.remote_start (field 40) -> RemoteStart.started = true.
         val startPayload = byteArrayOf(0x08, 0x01)
-        val frame = lengthDelimited(40, startPayload)
-        val parsed = RemoteMessageDecoder.decode(frame)
+        val parsed = RemoteMessageDecoder.decode(lengthDelimited(40, startPayload))
         assertTrue("remote_start must be detected", parsed.hasStart)
         assertTrue("remote_start.started must be parsed", parsed.startStarted)
     }
 
     @Test
-    fun `decodes remote ping request and ime batch counters`() {
-        // RemotePingRequest (field 8) -> val1 = 99 nested under its own field 1 tag.
+    fun `decodes remote ping request`() {
+        // RemoteMessage.remote_ping_request (field 8) -> RemotePingRequest.val1 = 99.
         val pingPayload = byteArrayOf(0x08) + varint(99)
-        val parsedPing = RemoteMessageDecoder.decode(lengthDelimited(8, pingPayload))
-        assertTrue(parsedPing.hasPingRequest)
-        assertEquals(99, parsedPing.pingRequestVal1)
-
-        // RemoteImeBatchEdit: ime_counter=7, field_counter=2
-        val imePayload = byteArrayOf(0x08, 0x07, 0x10, 0x02)
-        val parsedIme = RemoteMessageDecoder.decode(lengthDelimited(21, imePayload))
-        assertTrue(parsedIme.hasImeBatchEdit)
-        assertEquals(7, parsedIme.imeCounter)
-        assertEquals(2, parsedIme.imeFieldCounter)
+        val parsed = RemoteMessageDecoder.decode(lengthDelimited(8, pingPayload))
+        assertTrue(parsed.hasPingRequest)
+        assertEquals(99, parsed.pingRequestVal1)
     }
 
     @Test
     fun `decodes remote ping response`() {
-        // RemotePingResponse (field 9) -> val1 = 42 nested under its own field 1 tag.
-        val payload = byteArrayOf(0x08) + varint(42)
-        val parsed = RemoteMessageDecoder.decode(lengthDelimited(9, payload))
+        // RemoteMessage.remote_ping_response (field 9) -> RemotePingResponse.val1 = 42.
+        val pingPayload = byteArrayOf(0x08) + varint(42)
+        val parsed = RemoteMessageDecoder.decode(lengthDelimited(9, pingPayload))
         assertTrue(parsed.hasPingResponse)
         assertEquals(42, parsed.pingResponseVal1)
     }
 
     @Test
-    fun `ignores malformed data without throwing`() {
-        val parsed = RemoteMessageDecoder.decode(byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte()))
-        assertFalse(parsed.hasConfigure)
-        assertFalse(parsed.hasStart)
+    fun `decodes ime batch counters`() {
+        // RemoteMessage.remote_ime_batch_edit (field 21); nested ime_counter=7,
+        // field_counter=2.
+        val imePayload = byteArrayOf(0x08, 0x07, 0x10, 0x02)
+        val parsed = RemoteMessageDecoder.decode(lengthDelimited(21, imePayload))
+        assertTrue(parsed.hasImeBatchEdit)
+        assertEquals(7, parsed.imeCounter)
+        assertEquals(2, parsed.imeFieldCounter)
     }
 
     @Test
-    fun `server certificate sha256 is deterministic sha256 of der`() {
-        val der = byteArrayOf(0x30, 0x03, 0x01, 0x01, 0x00, 0x02.toByte(), 0x01, 0x01)
-        // A minimal real X.509 cert is not required here; the helper should not
-        // throw on a fingerprint made from DER bytes.
-        val digest = MessageDigest.getInstance("SHA-256").digest(der)
-        val expected = digest.joinToString("") { "%02x".format(it) }
-        assertEquals(64, expected.length)
-        assertTrue(expected.matches(Regex("[0-9a-f]{64}")))
+    fun `ignores malformed data without throwing`() {
+        val parsed = RemoteMessageDecoder.decode(byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte()))
+        assertFalse(parsed.hasConfigure)
+        assertFalse(parsed.hasStart)
+        assertFalse(parsed.hasPingRequest)
+        assertFalse(parsed.hasPingResponse)
+        assertFalse(parsed.hasImeBatchEdit)
     }
 }
