@@ -34,8 +34,7 @@ jobs:
           gradle :app:assembleDebug --stacktrace --no-daemon > /tmp/build.log 2>&1
           rc=$?
           if [ $rc -ne 0 ]; then
-            grep -E "e: |> Task|error:|FAILURE|Caused by|Could not|Compilation error|Unresolved" /tmp/build.log | tail -n 40 | while IFS= read -r line; do echo "::error::${line}"; done
-            tail -n 60 /tmp/build.log
+            grep -E "^e: |error:|FAILURE|Caused by|Unresolved|Cannot|Incompatible|actual type|No value passed|not applicable" /tmp/build.log | head -n 40 | while IFS= read -r line; do echo "::error::${line}"; done
             exit $rc
           fi
 
