@@ -186,7 +186,6 @@ class AndroidTvRemoteProtocol(
                 sslSocket.soTimeout = 30_000
                 sslSocket.startHandshake()
 
-                sslSocket = sslSocket
                 outputStream = sslSocket.getOutputStream()
                 inputStream = sslSocket.getInputStream()
                 connectedDevice = device
@@ -312,7 +311,7 @@ class AndroidTvRemoteProtocol(
     private suspend fun runReaderLoop(readySignal: CompletableDeferred<Boolean>) {
         try {
             val input = inputStream ?: return
-            while (isActive && sslSocket?.isClosed == false) {
+            while (kotlinx.coroutines.currentCoroutineContext().isActive && sslSocket?.isClosed == false) {
                 val payload = readDelimitedMessage(input) ?: continue
                 handleIncomingMessage(payload, readySignal)
             }

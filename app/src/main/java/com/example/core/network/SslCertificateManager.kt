@@ -91,7 +91,7 @@ object SslCertificateManager {
             if (androidKeyStore != null) {
                 // The provider already contains the key+chain; use it directly.
                 try {
-                    if (privateKey != null && androidKeyStore.getCertificateAlias(ALIAS) == null) {
+                    if (privateKey != null && !androidKeyStore.containsAlias(ALIAS)) {
                         androidKeyStore.setKeyEntry(
                             ALIAS,
                             privateKey,
