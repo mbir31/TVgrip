@@ -10,7 +10,6 @@ import com.example.core.model.ControllerProfile
 import com.example.core.model.DeviceConnectionState
 import com.example.core.model.GamepadState
 import com.example.core.model.PlayerSlotInfo
-import com.example.core.model.MotionSteeringConfig
 import com.example.core.model.PlayerSlot
 import com.example.core.model.TvCommand
 import com.example.core.model.TvDevice
@@ -300,8 +299,9 @@ class GamepadViewModel : ViewModel() {
 
     fun setControllerMode(mode: ControllerMode) {
         _activeMode.value = mode
+        // The engine's config (including user sensitivity) is managed centrally
+        // by SettingsRepository in TVGripApplication, so do not overwrite it here.
         if (mode == ControllerMode.RACING_STEERING) {
-            steeringEngine.config = MotionSteeringConfig(sensitivity = _activeProfile.value.steeringSensitivity)
             steeringEngine.start()
         } else {
             steeringEngine.stop()

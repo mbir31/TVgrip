@@ -160,7 +160,6 @@ class KeyboardViewModel : ViewModel() {
         val newState = !_isAirMouseActive.value
         _isAirMouseActive.value = newState
         if (newState) {
-            airMouseEngine.config = com.example.core.model.AirMouseConfig()
             airMouseEngine.start()
             haptics.performSuccess()
         } else {
