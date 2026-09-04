@@ -157,7 +157,10 @@ class AndroidTvRemoteProtocol(
                 disconnect()
 
                 val host = device.host
-                val remotePort = if (device.port > 0) device.port else REMOTE_PORT_DEFAULT
+                // Android TV Remote v2 control always uses port 6466. The pairing
+                // service uses 6467; the stored TvDevice.port must never redirect
+                // the control channel to the pairing port.
+                val remotePort = REMOTE_PORT_DEFAULT
                 Log.d(TAG, "Connecting to Android TV Remote v2 session at $host:$remotePort")
 
                 val expectedFingerprint = device.serverCertSha256
@@ -285,6 +288,9 @@ class AndroidTvRemoteProtocol(
         ready.set(false)
         readerJob?.cancel()
         readerJob = null
+        // Release any held keys while the write path is still available so the
+        // TV does not keep a stuck D-pad/button pressed after a disconnect.
+        releaseAllGamepadKeys()
         runCatching { outputStream?.close() }
         runCatching { inputStream?.close() }
         runCatching { sslSocket?.close() }
@@ -292,7 +298,6 @@ class AndroidTvRemoteProtocol(
         outputStream = null
         inputStream = null
         connectedDevice = null
-        releaseAllGamepadKeys()
         heldKeys.clear()
         lastStickDirX = 0
         lastStickDirY = 0
@@ -566,16 +571,18 @@ class AndroidTvRemoteProtocol(
     /** Sends a key up for any key still held, then clears the held set. */
     private fun releaseAllGamepadKeys() {
         val keys = heldKeys.keys.toList()
-        for (key in keys) {
-            try {
-                sendKeyInject(key, DIRECTION_END)
-            } catch (e: Exception) {
-                Log.d(TAG, "Failed to release held key $key: ${e.message}")
+        synchronized(writeLock) {
+            for (key in keys) {
+                try {
+                    sendKeyInject(key, DIRECTION_END)
+                } catch (e: Exception) {
+                    Log.d(TAG, "Failed to release held key $key: ${e.message}")
+                }
             }
+            heldKeys.clear()
+            lastStickDirX = 0
+            lastStickDirY = 0
         }
-        heldKeys.clear()
-        lastStickDirX = 0
-        lastStickDirY = 0
     }
 
     private fun setGamepadKey(keyCode: Int, pressed: Boolean) {

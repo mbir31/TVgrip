@@ -10,6 +10,7 @@ import com.example.core.model.TvDevice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +39,17 @@ class TvConnectionManager {
 
     private val TAG = "TvConnectionManager"
     private val scope = CoroutineScope(Dispatchers.IO + Job())
+
+    // Commands are serialized through a single dispatcher so rapid press/release
+    // sequences (D-pad, gamepad buttons) are delivered to the TV in the exact
+    // order they were generated. The generation tag drops stale commands after
+    // a connect/disconnect switch so old input cannot leak into a new session.
+    private val commandQueue = Channel<QueuedCommand>(Channel.UNLIMITED)
+
+    @Volatile
+    private var generation = 0L
+
+    private data class QueuedCommand(val generation: Long, val command: TvCommand)
 
     private val _connectedDevice = MutableStateFlow<TvDevice?>(null)
     val connectedDevice: StateFlow<TvDevice?> = _connectedDevice.asStateFlow()
@@ -78,6 +90,30 @@ class TvConnectionManager {
 
     init {
         logInfo("TVGrip Connection Manager initialized.")
+        scope.launch { dispatchCommands() }
+    }
+
+    private suspend fun dispatchCommands() {
+        for (queued in commandQueue) {
+            if (queued.generation != generation) {
+                // A newer connect/disconnect superseded this input; drop it.
+                continue
+            }
+            val protocol = activeProtocol
+            if (protocol == null || !protocol.isConnected()) {
+                continue
+            }
+            try {
+                val success = protocol.sendCommand(queued.command)
+                if (success) {
+                    _packetCountSent.update { it + 1 }
+                } else {
+                    logError("Failed to deliver command to TV: ${queued.command}")
+                }
+            } catch (e: Exception) {
+                logError("Command dispatch failed: ${e.message}")
+            }
+        }
     }
 
     /**
@@ -98,6 +134,12 @@ class TvConnectionManager {
             if (_connectionState.value == DeviceConnectionState.CONNECTED && device != null) {
                 _connectionState.value = DeviceConnectionState.RECONNECTING
                 _connectedDevice.value = device.copy(connectionState = DeviceConnectionState.RECONNECTING)
+                val lostProtocol = activeProtocol
+                activeProtocol = null
+                generation += 1
+                scope.launch {
+                    try { lostProtocol?.disconnect() } catch (_: Exception) {}
+                }
                 logInfo("Network lost; waiting for connectivity before reconnecting.")
             }
             return
@@ -130,6 +172,7 @@ class TvConnectionManager {
 
         desiredDevice = device.copy(connectionState = DeviceConnectionState.CONNECTING)
         manualDisconnect = false
+        generation += 1
         reconnectJob?.cancel()
         reconnectJob = null
 
@@ -209,19 +252,13 @@ class TvConnectionManager {
         if (protocol == null || !protocol.isConnected()) {
             return
         }
-        scope.launch {
-            val success = protocol.sendCommand(command)
-            if (success) {
-                _packetCountSent.update { it + 1 }
-            } else {
-                logError("Failed to deliver command to TV: $command")
-            }
-        }
+        commandQueue.trySend(QueuedCommand(generation, command))
     }
 
     fun disconnect() {
         manualDisconnect = true
         desiredDevice = null
+        generation += 1
         reconnectJob?.cancel()
         reconnectJob = null
         scope.launch {
@@ -253,6 +290,7 @@ class TvConnectionManager {
 
         val lostProtocol = activeProtocol
         activeProtocol = null
+        generation += 1
         scope.launch { try { lostProtocol?.disconnect() } catch (_: Exception) {} }
         stopPingLoop()
         _connectionState.value = DeviceConnectionState.RECONNECTING

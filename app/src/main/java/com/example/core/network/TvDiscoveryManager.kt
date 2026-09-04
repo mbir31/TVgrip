@@ -177,7 +177,9 @@ class TvDiscoveryManager(private val context: Context) {
                     model = "Manual Host",
                     platform = "Android TV",
                     host = ip,
-                    port = port,
+                    // The probed port is only a reachability check against the
+                    // pairing service (6467); the control channel is always 6466.
+                    port = 6466,
                     protocolType = ProtocolType.ANDROID_TV_REMOTE_V2,
                     capabilities = CapabilitySet.DEFAULT_ANDROID_TV
                 )
