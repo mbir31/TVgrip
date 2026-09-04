@@ -88,6 +88,7 @@ class TVGripApplication : Application() {
 
         appScope.launch {
             settingsRepository.settingsFlow.collect { settings ->
+                hapticFeedbackHelper.isHapticsEnabled = settings.hapticFeedbackEnabled
                 airMouseEngine.lowPowerMode = settings.batterySaverMode
                 motionSteeringEngine.lowPowerMode = settings.batterySaverMode
             }
