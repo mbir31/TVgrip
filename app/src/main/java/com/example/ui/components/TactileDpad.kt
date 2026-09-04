@@ -28,6 +28,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -80,6 +84,8 @@ fun TactileDpad(
                 .offset(y = 12.dp),
             isPressed = activeKey == TvKey.UP,
             testTag = "dpad_up",
+            accessibilityLabel = "DPAD Up",
+            tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.UP
                 onDirectionPressChanged?.invoke(TvKey.UP, true)
@@ -106,6 +112,8 @@ fun TactileDpad(
                 .offset(y = (-12).dp),
             isPressed = activeKey == TvKey.DOWN,
             testTag = "dpad_down",
+            accessibilityLabel = "DPAD Down",
+            tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.DOWN
                 onDirectionPressChanged?.invoke(TvKey.DOWN, true)
@@ -132,6 +140,8 @@ fun TactileDpad(
                 .offset(x = 12.dp),
             isPressed = activeKey == TvKey.LEFT,
             testTag = "dpad_left",
+            accessibilityLabel = "DPAD Left",
+            tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.LEFT
                 onDirectionPressChanged?.invoke(TvKey.LEFT, true)
@@ -158,6 +168,8 @@ fun TactileDpad(
                 .offset(x = (-12).dp),
             isPressed = activeKey == TvKey.RIGHT,
             testTag = "dpad_right",
+            accessibilityLabel = "DPAD Right",
+            tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.RIGHT
                 onDirectionPressChanged?.invoke(TvKey.RIGHT, true)
@@ -182,6 +194,10 @@ fun TactileDpad(
             modifier = Modifier
                 .size(76.dp)
                 .testTag("dpad_center")
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "OK"
+                }
                 .shadow(8.dp, CircleShape)
                 .clip(CircleShape)
                 .background(
@@ -209,7 +225,9 @@ fun TactileDpad(
                             onDirectionPressChanged?.invoke(TvKey.CENTER, false)
                         },
                         onTap = {
-                            onDirectionClick(TvKey.CENTER)
+                            if (onDirectionPressChanged == null) {
+                                onDirectionClick(TvKey.CENTER)
+                            }
                         }
                     )
                 },
@@ -231,6 +249,8 @@ private fun DpadSectorButton(
     modifier: Modifier = Modifier,
     isPressed: Boolean,
     testTag: String,
+    accessibilityLabel: String,
+    tapEmitsClick: Boolean,
     onPress: () -> Unit,
     onRelease: () -> Unit,
     onClick: () -> Unit,
@@ -240,6 +260,10 @@ private fun DpadSectorButton(
         modifier = modifier
             .size(54.dp)
             .testTag(testTag)
+            .semantics {
+                role = Role.Button
+                contentDescription = accessibilityLabel
+            }
             .clip(CircleShape)
             .background(
                 if (isPressed) {
@@ -255,7 +279,12 @@ private fun DpadSectorButton(
                         tryAwaitRelease()
                         onRelease()
                     },
-                    onTap = { onClick() }
+                    onTap = {
+                        // When press tracking is enabled a press/release already
+                        // performs the key. Emitting an additional SHORT click on
+                        // the same tap would double-activate the key.
+                        if (tapEmitsClick) onClick()
+                    }
                 )
             },
         contentAlignment = Alignment.Center

@@ -59,6 +59,7 @@ class VoiceInputManager(private val context: Context) {
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission required."
                         else -> "Voice recognition error ($error)."
                     }
+                    _partialResult.value = ""
                     _voiceState.value = VoiceState.Error(message)
                 }
 

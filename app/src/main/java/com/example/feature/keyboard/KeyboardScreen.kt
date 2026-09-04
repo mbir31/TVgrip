@@ -1,5 +1,9 @@
 package com.example.feature.keyboard
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +36,7 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,11 +46,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -53,6 +60,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.core.model.TvKey
@@ -80,6 +91,22 @@ fun KeyboardScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.stopForegroundSensors()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val microphonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.toggleVoiceListening()
+    }
 
     Box(
         modifier = modifier
@@ -139,6 +166,17 @@ fun KeyboardScreen(
                                         tint = GripTextSecondary
                                     )
                                 }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                // Air mouse is integrated directly in the keyboard surface.
+                                TactileButton(
+                                    onClick = { viewModel.toggleAirMouse() },
+                                    accentColor = if (state.isAirMouseActive) GripCyan else null,
+                                    text = if (state.isAirMouseActive) "AIR MOUSE ON" else "AIR MOUSE",
+                                    icon = Icons.Default.Mouse,
+                                    iconSize = 14.dp,
+                                    modifier = Modifier.height(34.dp),
+                                    testTag = "keyboard_toggle_air_mouse"
+                                )
                             }
                         }
 
@@ -219,7 +257,7 @@ fun KeyboardScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (state.isListeningVoice) "Listening... Speak into phone mic" else "Tap microphone to speak and send instantly",
+                            text = if (state.isListeningVoice) "Listening... Speak into phone mic" else "Tap microphone to speak and send to the TV",
                             color = if (state.isListeningVoice) GripCyan else GripTextSecondary,
                             fontSize = 13.sp
                         )
@@ -227,7 +265,17 @@ fun KeyboardScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         TactileButton(
-                            onClick = { viewModel.toggleVoiceListening() },
+                            onClick = {
+                                if (ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.RECORD_AUDIO
+                                    ) != PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                } else {
+                                    viewModel.toggleVoiceListening()
+                                }
+                            },
                             accentColor = if (state.isListeningVoice) GripRed else GripOrangeBright,
                             icon = if (state.isListeningVoice) Icons.Default.MicOff else Icons.Default.Mic,
                             iconSize = 28.dp,

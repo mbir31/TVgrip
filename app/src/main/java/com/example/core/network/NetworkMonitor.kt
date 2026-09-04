@@ -41,9 +41,10 @@ class NetworkMonitor(private val context: Context) {
             }
         }
 
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
+        // Do not require NET_CAPABILITY_INTERNET: a TV can be controlled on a
+        // local-only Wi-Fi network with no upstream internet. We only care that
+        // the phone has a usable LAN transport.
+        val request = NetworkRequest.Builder().build()
 
         connectivityManager.registerNetworkCallback(request, callback)
         trySend(getCurrentStatus())
@@ -56,9 +57,9 @@ class NetworkMonitor(private val context: Context) {
     fun getCurrentStatus(): NetworkStatus {
         val activeNetwork = connectivityManager.activeNetwork
         val caps = connectivityManager.getNetworkCapabilities(activeNetwork)
-        val isConnected = caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         val isWifi = caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
         val isEthernet = caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        val isConnected = caps != null && (isWifi || isEthernet)
         val ip = getDeviceLocalIp()
 
         return NetworkStatus(

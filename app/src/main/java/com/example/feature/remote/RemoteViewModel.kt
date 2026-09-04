@@ -3,8 +3,6 @@ package com.example.feature.remote
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.TVGripApplication
-import com.example.core.model.AirMouseConfig
-import com.example.core.model.CapabilityLevel
 import com.example.core.model.CapabilitySet
 import com.example.core.model.DeviceConnectionState
 import com.example.core.model.TvCommand
@@ -32,8 +30,7 @@ data class RemoteUiState(
     val activePreset: RemotePreset = RemotePreset.CLASSIC,
     val isAirMouseActive: Boolean = false,
     val isMuted: Boolean = false,
-    val isPowerDialogVisible: Boolean = false,
-    val airMouseConfig: AirMouseConfig = AirMouseConfig()
+    val isPowerDialogVisible: Boolean = false
 )
 
 class RemoteViewModel : ViewModel() {
@@ -42,7 +39,6 @@ class RemoteViewModel : ViewModel() {
     private val connectionManager = app.connectionManager
     private val airMouseEngine = app.airMouseEngine
     private val haptics = app.hapticFeedbackHelper
-    private val settingsRepository = app.settingsRepository
 
     private val _activePreset = MutableStateFlow(RemotePreset.CLASSIC)
     private val _isAirMouseActive = MutableStateFlow(false)
@@ -53,23 +49,20 @@ class RemoteViewModel : ViewModel() {
         connectionManager.capabilities,
         _activePreset,
         _isAirMouseActive,
-        _isMuted,
-        settingsRepository.settingsFlow
+        _isMuted
     ) { params: Array<Any?> ->
         val device = params[0] as? TvDevice
         val caps = params[1] as CapabilitySet
         val preset = params[2] as RemotePreset
         val airMouse = params[3] as Boolean
         val muted = params[4] as Boolean
-        val settings = params[5] as com.example.core.data.repository.AppSettings
         RemoteUiState(
             connectedDevice = device,
             isConnected = device?.connectionState == DeviceConnectionState.CONNECTED,
             capabilities = caps,
             activePreset = preset,
             isAirMouseActive = airMouse,
-            isMuted = muted,
-            airMouseConfig = settings.airMouseConfig
+            isMuted = muted
         )
     }.stateIn(
         scope = viewModelScope,
@@ -117,7 +110,6 @@ class RemoteViewModel : ViewModel() {
         val newState = !_isAirMouseActive.value
         _isAirMouseActive.value = newState
         if (newState) {
-            airMouseEngine.config = uiState.value.airMouseConfig
             airMouseEngine.start()
             haptics.performSuccess()
         } else {
@@ -129,6 +121,14 @@ class RemoteViewModel : ViewModel() {
     fun calibrateAirMouse() {
         airMouseEngine.calibrateNeutral()
         haptics.performHeavyClick()
+    }
+
+    /** Stops foreground sensor listening when the app leaves the foreground. */
+    fun stopForegroundSensors() {
+        if (_isAirMouseActive.value) {
+            _isAirMouseActive.value = false
+        }
+        airMouseEngine.stop()
     }
 
     override fun onCleared() {

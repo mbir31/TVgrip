@@ -25,7 +25,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,12 +51,17 @@ fun TactileTrigger(
     testTag: String = "trigger_button"
 ) {
     val haptics = remember { runCatching { TVGripApplication.instance.hapticFeedbackHelper }.getOrNull() }
+    val density = LocalDensity.current
     var triggerValue by remember { mutableFloatStateOf(0f) }
     var isPressed by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
             .testTag(testTag)
+            .semantics {
+                role = Role.Button
+                contentDescription = "$label trigger"
+            }
             .width(86.dp)
             .height(44.dp)
             .clip(RoundedCornerShape(12.dp))
@@ -84,7 +94,10 @@ fun TactileTrigger(
                         },
                         onDrag = { change, dragAmount ->
                             change.consume()
-                            val delta = dragAmount.y / 60f
+                            // Normalize the drag (reported in px) against the
+                            // trigger height so sensitivity is density independent.
+                            val triggerHeightPx = with(density) { 44.dp.toPx() }
+                            val delta = dragAmount.y / triggerHeightPx
                             val newVal = (triggerValue + delta).coerceIn(0f, 1f)
                             triggerValue = newVal
                             onValueChange(newVal)

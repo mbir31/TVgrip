@@ -21,6 +21,10 @@ class AirMouseEngine(
     private val accelSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
     var config: AirMouseConfig = AirMouseConfig()
+
+    /** When enabled, the gyro is sampled at the slowest UI rate to save power. */
+    var lowPowerMode: Boolean = false
+
     var isEnabled: Boolean = false
         private set
 
@@ -35,8 +39,9 @@ class AirMouseEngine(
     fun start() {
         if (isEnabled) return
         isEnabled = true
+        val delay = if (lowPowerMode) SensorManager.SENSOR_DELAY_UI else SensorManager.SENSOR_DELAY_GAME
         gyroSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager.registerListener(this, it, delay)
         }
     }
 

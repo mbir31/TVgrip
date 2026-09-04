@@ -1,9 +1,9 @@
-package com.example.core.multiplayer
+package com.example.core.gamepad
 
 import android.content.Context
 import android.os.Build
 import com.example.core.haptics.HapticFeedbackHelper
-import com.example.core.model.LobbySlotInfo
+import com.example.core.model.PlayerSlotInfo
 import com.example.core.model.PlayerSlot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class MultiplayerLobbyManager(
+class PlayerSlotManager(
     private val context: Context,
     private val haptics: HapticFeedbackHelper
 ) {
@@ -21,19 +21,19 @@ class MultiplayerLobbyManager(
     private val _activeSlot = MutableStateFlow(PlayerSlot.PLAYER_1)
     val activeSlot: StateFlow<PlayerSlot> = _activeSlot.asStateFlow()
 
-    private val _lobbySlots = MutableStateFlow<List<LobbySlotInfo>>(emptyList())
-    val lobbySlots: StateFlow<List<LobbySlotInfo>> = _lobbySlots.asStateFlow()
+    private val _playerSlots = MutableStateFlow<List<PlayerSlotInfo>>(emptyList())
+    val playerSlots: StateFlow<List<PlayerSlotInfo>> = _playerSlots.asStateFlow()
 
     private val deviceModel = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
 
     init {
-        refreshLobbySlots(_activeSlot.value)
+        refreshPlayerSlots(_activeSlot.value)
     }
 
     fun setPlayerSlot(slot: PlayerSlot) {
         _activeSlot.value = slot
         haptics.performHeavyClick()
-        refreshLobbySlots(slot)
+        refreshPlayerSlots(slot)
     }
 
     fun testRumble(slot: PlayerSlot = _activeSlot.value) {
@@ -46,33 +46,35 @@ class MultiplayerLobbyManager(
         }
     }
 
-    fun cleanupInactivePeers() {
-        refreshLobbySlots(_activeSlot.value)
+    fun cleanupInactivePresets() {
+        refreshPlayerSlots(_activeSlot.value)
     }
 
-    private fun refreshLobbySlots(currentLocalSlot: PlayerSlot) {
+    private fun refreshPlayerSlots(currentLocalSlot: PlayerSlot) {
         val slots = PlayerSlot.entries.map { slot ->
             if (slot == currentLocalSlot) {
-                LobbySlotInfo(
+                PlayerSlotInfo(
                     slot = slot,
                     deviceName = "$deviceModel (This Phone)",
                     isLocalDevice = true,
                     isOccupied = true,
-                    pingMs = 8L,
+                    pingMs = 0L,
                     batteryPercent = 95
                 )
             } else {
-                // Available / virtual slot for local multiplayer join
-                LobbySlotInfo(
+                // Local preset: only one phone is actually sending input through
+                // the Android TV Remote v2 protocol. These are alternate local
+                // player-layout presets, not remote phones.
+                PlayerSlotInfo(
                     slot = slot,
-                    deviceName = "Open Slot (${slot.fullName})",
-                    isLocalDevice = false,
+                    deviceName = "Local Preset (${slot.fullName})",
+                    isLocalDevice = true,
                     isOccupied = false,
                     pingMs = 0L,
                     batteryPercent = 100
                 )
             }
         }
-        _lobbySlots.value = slots
+        _playerSlots.value = slots
     }
 }

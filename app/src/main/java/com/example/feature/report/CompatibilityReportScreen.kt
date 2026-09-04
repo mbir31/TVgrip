@@ -134,14 +134,14 @@ fun CompatibilityReportScreen(
 
                 TactileCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        FeatureAuditItem("D-Pad & Navigation Keys", capabilities.remoteNavigation, "Standard Android TV keycodes over secure TLS connection.")
-                        FeatureAuditItem("Volume & Mute Control", capabilities.volumeControl, "Hardware volume control supported by modern CEC/Android sound subsystem.")
-                        FeatureAuditItem("TV Keyboard Text Sync", capabilities.keyboardInput, "Live typing and full string synchronization.")
-                        FeatureAuditItem("Touchpad Cursor", capabilities.touchpad, "Relative pointer coordinate streaming.")
-                        FeatureAuditItem("Air Mouse (Gyro)", capabilities.airMouse, "Hardware IMU orientation tracking to TV mouse pointer.")
-                        FeatureAuditItem("Game Controller (Gamepad)", capabilities.gameController, "Standard Android joystick & button key event translation.")
-                        FeatureAuditItem("Motion Steering (Racing)", capabilities.motionSteering, "Real-time tilt sensor mapped to axis inputs.")
-                        FeatureAuditItem("Power Standby / Wake", capabilities.power, "Network standby wake supported on most newer Google TV devices.")
+                        FeatureAuditItem("D-Pad & Navigation Keys", capabilities.remoteNavigation, "Real Android TV keycodes over a pinned mutual-TLS session.")
+                        FeatureAuditItem("Volume & Mute Control", capabilities.volumeControl, "Volume up/down/mute key injection sent to the TV.")
+                        FeatureAuditItem("TV Keyboard Text Sync", capabilities.keyboardInput, "IME batch-edit text injection to the focused TV text field.")
+                        FeatureAuditItem("Navigation Touchpad", capabilities.touchpad, "Slide/gyro is translated to real D-pad navigation + select.")
+                        FeatureAuditItem("Air Mouse (Gyro)", capabilities.airMouse, "IMU navigation maps to D-pad actions; no absolute pointer stream in the protocol.")
+                        FeatureAuditItem("Game Controller", capabilities.gameController, "Button/d-pad key injection; analog sticks map to directional key events.")
+                        FeatureAuditItem("Motion Steering", capabilities.motionSteering, "Tilt maps to directional key events for games that accept D-pad steering.")
+                        FeatureAuditItem("Power Standby / Wake", capabilities.power, "POWER key injection; actual wake behavior depends on the TV.")
                     }
                 }
 
@@ -156,7 +156,7 @@ fun CompatibilityReportScreen(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "For lowest gaming latency (<10ms), ensure both your phone and TV are connected to a 5GHz Wi-Fi band or the TV is hardwired via Ethernet.",
+                            text = "For the most responsive remote, use a 5GHz Wi-Fi band or connect the TV via Ethernet. Actual latency depends on your network and the TV.",
                             color = GripTextSecondary,
                             fontSize = 12.sp,
                             lineHeight = 18.sp

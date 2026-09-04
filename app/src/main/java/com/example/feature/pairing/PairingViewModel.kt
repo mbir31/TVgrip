@@ -8,14 +8,16 @@ import com.example.core.model.DeviceConnectionState
 import com.example.core.model.TvDevice
 import com.example.core.network.PairingResult
 import com.example.core.network.TvPairingService
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 enum class PairingStep {
     INTRO,
@@ -123,7 +125,7 @@ class PairingViewModel : ViewModel() {
                     _step.value = PairingStep.PAIRING_CODE_INPUT
                 }
                 is PairingResult.Success -> {
-                    onPairingSuccess(device)
+                    onPairingSuccess(device, result.serverCertSha256)
                 }
                 is PairingResult.Failed -> {
                     _errorMessage.value = result.error
@@ -152,7 +154,7 @@ class PairingViewModel : ViewModel() {
         viewModelScope.launch {
             when (val result = pairingService.confirmPairingCode(code)) {
                 is PairingResult.Success -> {
-                    onPairingSuccess(device)
+                    onPairingSuccess(device, result.serverCertSha256)
                 }
                 is PairingResult.Failed -> {
                     _errorMessage.value = result.error
@@ -165,25 +167,51 @@ class PairingViewModel : ViewModel() {
         }
     }
 
-    private suspend fun onPairingSuccess(device: TvDevice) {
+    private suspend fun onPairingSuccess(device: TvDevice, serverCertSha256: String?) {
         _step.value = PairingStep.TESTING_CAPABILITIES
 
         val pairedDevice = device.copy(
             isFavorite = true,
             port = 6466,
-            connectionState = DeviceConnectionState.CONNECTED
+            connectionState = DeviceConnectionState.CONNECTING,
+            serverCertSha256 = serverCertSha256?.takeIf { it.isNotBlank() }
         )
         deviceRepository.saveDevice(pairedDevice)
         deviceRepository.setPreferredDevice(pairedDevice.id)
 
-        // Connect remote socket session on port 6466
+        // Connect the authenticated remote control session on port 6466.
         connectionManager.connect(pairedDevice)
 
-        delay(1200)
+        // Wait until the protocol reports a genuinely authenticated session
+        // (remote_start received) or an error. Pairing already succeeded, so a
+        // timeout simply means the remote session is still attempting to start.
+        val finalState = withTimeoutOrNull(15_000L) {
+            connectionManager.connectionState.first { state ->
+                state == DeviceConnectionState.CONNECTED ||
+                    state == DeviceConnectionState.ERROR ||
+                    state == DeviceConnectionState.RECONNECTING
+            }
+        }
 
-        _testedCapabilities.value = CapabilitySet.FULLY_FEATURED
+        _testedCapabilities.value = connectionManager.capabilities.value
 
-        _step.value = PairingStep.READY
+        when (finalState) {
+            DeviceConnectionState.ERROR -> {
+                _errorMessage.value = connectionManager.lastError.value
+                    ?: "Pairing succeeded but the remote control session could not be established."
+                _step.value = PairingStep.ERROR
+            }
+            DeviceConnectionState.CONNECTED, DeviceConnectionState.RECONNECTING -> {
+                _step.value = PairingStep.READY
+            }
+            null -> {
+                _errorMessage.value =
+                    "Pairing succeeded, but the Android TV Remote session did not become ready within 15 seconds. " +
+                        "Make sure the TV is still on the same Wi-Fi network and press Retry to reconnect."
+                _step.value = PairingStep.ERROR
+            }
+            else -> _step.value = PairingStep.ERROR
+        }
     }
 
     fun setManualIp(ip: String) {
@@ -196,16 +224,24 @@ class PairingViewModel : ViewModel() {
 
         _isTestingManualIp.value = true
         viewModelScope.launch {
+            val reachable = discoveryManager.testManualIp(ip, 6467)
+            _isTestingManualIp.value = false
+
             val device = TvDevice(
                 id = "manual_${ip.replace('.', '_')}",
                 name = "Android TV ($ip)",
                 model = "Android TV",
                 manufacturer = "Google TV",
                 host = ip,
-                port = 6467,
+                port = 6466,
                 connectionState = DeviceConnectionState.DISCONNECTED
             )
-            _isTestingManualIp.value = false
+            if (reachable == null) {
+                _errorMessage.value =
+                    "Could not reach the TV pairing port (6467) at $ip. Confirm the IP is correct, the TV is on, and it is on the same Wi-Fi network."
+                _step.value = PairingStep.ERROR
+                return@launch
+            }
             selectDevice(device)
         }
     }

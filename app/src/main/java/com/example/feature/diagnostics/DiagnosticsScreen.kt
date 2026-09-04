@@ -104,8 +104,8 @@ fun DiagnosticsScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = if (state.currentPingMs > 0) "${state.currentPingMs} ms" else if (state.isConnected) "< 15 ms" else "---",
-                            color = if (state.currentPingMs in 1..25) GripEmerald else GripOrangeBright,
+                            text = if (state.currentPingMs > 0) "${state.currentPingMs} ms" else if (state.isConnected) "measuring…" else "---",
+                            color = if (state.currentPingMs > 0 && state.currentPingMs <= 25) GripEmerald else GripOrangeBright,
                             fontSize = 38.sp,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 1.sp
@@ -126,7 +126,7 @@ fun DiagnosticsScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Real Command Verification Diagnostic Test (Phase 31)
+                // Transport Verification Diagnostic Test
                 TactileCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -148,7 +148,7 @@ fun DiagnosticsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "Sends a verifiable diagnostic ping and key event over the active TLS connection to verify socket delivery.",
+                            text = "Writes a protocol ping over the active TLS session and checks that the remote socket accepted it. This verifies local transport, not on-TV side effects.",
                             color = GripTextSecondary,
                             fontSize = 12.sp
                         )

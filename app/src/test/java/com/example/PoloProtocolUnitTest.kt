@@ -105,6 +105,36 @@ class PoloProtocolUnitTest {
     }
 
     @Test
+    fun testOuterMessageOptionsWireFieldOrder() {
+        val msg = PoloProtocol.OuterMessage(
+            options = PoloProtocol.Options(
+                preferredRole = PoloProtocol.RoleType.ROLE_TYPE_INPUT,
+                inputEncodings = listOf(PoloProtocol.Encoding(PoloProtocol.EncodingType.ENCODING_TYPE_HEXADECIMAL, 6)),
+                outputEncodings = listOf(PoloProtocol.Encoding(PoloProtocol.EncodingType.ENCODING_TYPE_HEXADECIMAL, 6))
+            )
+        )
+        val framed = msg.encode()
+        val body = framed.copyOfRange(1, framed.size) // simple single-byte length prefix; fine for this small frame
+        assertTrue("Options must encode input_encodings as field 1", body.contains(0x0A.toByte()))
+        assertTrue("Options must encode output_encodings as field 2", body.contains(0x12.toByte()))
+        assertTrue("Options must encode preferred_role as field 3", body.contains(0x18.toByte()))
+    }
+
+    @Test
+    fun testOuterMessageConfigurationWireFieldOrder() {
+        val msg = PoloProtocol.OuterMessage(
+            configuration = PoloProtocol.Configuration(
+                encoding = PoloProtocol.Encoding(PoloProtocol.EncodingType.ENCODING_TYPE_HEXADECIMAL, 6),
+                clientRole = PoloProtocol.RoleType.ROLE_TYPE_INPUT
+            )
+        )
+        val framed = msg.encode()
+        val body = framed.copyOfRange(1, framed.size)
+        assertTrue("Configuration must encode encoding as field 1", body.contains(0x0A.toByte()))
+        assertTrue("Configuration must encode client_role as field 2", body.contains(0x10.toByte()))
+    }
+
+    @Test
     fun testPoloCryptographicSecretCalculation() {
         val clientModulus = BigInteger("12345678901234567890").toByteArray()
         val clientExponent = BigInteger("65537").toByteArray()

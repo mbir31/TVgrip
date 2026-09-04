@@ -41,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +60,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.core.model.ButtonLayoutType
@@ -103,6 +107,16 @@ fun GamepadScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.stopForegroundSensors()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var profileMenuExpanded by remember { mutableStateOf(false) }
 
     Box(
@@ -116,7 +130,7 @@ fun GamepadScreen(
                 state = state,
                 onNavigateBack = onNavigateBack,
                 onSelectSlot = { viewModel.selectPlayerSlot(it) },
-                onOpenLobby = { viewModel.openLobbySheet() },
+                onOpenPlayerSettings = { viewModel.openPlayerSheet() },
                 onToggleLock = { viewModel.toggleLock() },
                 onToggleTurbo = { viewModel.toggleTurbo() },
                 onOpenProfiles = { profileMenuExpanded = true },
@@ -202,14 +216,14 @@ fun GamepadScreen(
             DeveloperCredit(modifier = Modifier.navigationBarsPadding())
         }
 
-        // Multiplayer 4-Player Lobby Sheet
-        if (state.isLobbySheetOpen) {
-            MultiplayerLobbySheet(
+        // Local player-slot / button-layout preset sheet
+        if (state.isPlayerSheetOpen) {
+            PlayerSlotSheet(
                 activeSlot = state.activePlayerSlot,
-                lobbySlots = state.lobbySlots,
+                playerSlots = state.playerSlots,
                 onSelectSlot = { viewModel.selectPlayerSlot(it) },
                 onTestRumble = { viewModel.testRumble(it) },
-                onDismiss = { viewModel.closeLobbySheet() }
+                onDismiss = { viewModel.closePlayerSheet() }
             )
         }
     }
@@ -220,7 +234,7 @@ private fun GamepadHudBar(
     state: GamepadUiState,
     onNavigateBack: () -> Unit,
     onSelectSlot: (PlayerSlot) -> Unit,
-    onOpenLobby: () -> Unit,
+    onOpenPlayerSettings: () -> Unit,
     onToggleLock: () -> Unit,
     onToggleTurbo: () -> Unit,
     onOpenProfiles: () -> Unit,
@@ -290,7 +304,7 @@ private fun GamepadHudBar(
         PlayerSlotSelector(
             activeSlot = state.activePlayerSlot,
             onSelectSlot = onSelectSlot,
-            onOpenLobby = onOpenLobby
+            onOpenPlayerSettings = onOpenPlayerSettings
         )
 
         // Right Controls

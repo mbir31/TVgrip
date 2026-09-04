@@ -23,15 +23,19 @@ class MotionSteeringEngine(
 
     var config: MotionSteeringConfig = MotionSteeringConfig()
 
+    /** When enabled, sensor samples are delivered at the slowest UI rate. */
+    var lowPowerMode: Boolean = false
+
     private var centerOffset: Float = 0f
 
     fun start() {
         if (isEnabled) return
         isEnabled = true
+        val delay = if (lowPowerMode) SensorManager.SENSOR_DELAY_UI else SensorManager.SENSOR_DELAY_GAME
         rotationSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager.registerListener(this, it, delay)
         } ?: accelSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager.registerListener(this, it, delay)
         }
     }
 

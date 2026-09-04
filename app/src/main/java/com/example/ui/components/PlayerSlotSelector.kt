@@ -43,7 +43,7 @@ import com.example.ui.theme.GripTextTertiary
 fun PlayerSlotSelector(
     activeSlot: PlayerSlot,
     onSelectSlot: (PlayerSlot) -> Unit,
-    onOpenLobby: () -> Unit,
+    onOpenPlayerSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val activeColor = Color(activeSlot.colorHex)
@@ -102,19 +102,19 @@ fun PlayerSlotSelector(
 
         Spacer(modifier = Modifier.width(2.dp))
 
-        // Lobby sheet launcher icon
+        // Player-slot preset launcher icon
         Box(
             modifier = Modifier
                 .size(24.dp)
                 .clip(CircleShape)
                 .background(activeColor.copy(alpha = 0.15f))
-                .clickable { onOpenLobby() }
-                .testTag("open_multiplayer_lobby_button"),
+                .clickable { onOpenPlayerSettings() }
+                .testTag("open_player_slot_picker"),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Group,
-                contentDescription = "Multiplayer Lobby",
+                contentDescription = "Player slot presets",
                 tint = activeColor,
                 modifier = Modifier.size(13.dp)
             )

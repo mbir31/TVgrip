@@ -8,6 +8,7 @@ import com.example.core.model.TvDevice
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -44,10 +45,18 @@ class HomeViewModel : ViewModel() {
     )
 
     init {
-        // Auto-reconnect to preferred or last-connected TV if enabled
+        // Reconnect to the preferred/last-connected TV when the app opens if
+        // auto-reconnect is enabled. Session-loss and network-change recovery
+        // are handled independently by TvConnectionManager.
         viewModelScope.launch {
+            val settings = app.settingsRepository.settingsFlow.first()
+            if (!settings.autoReconnect) return@launch
             val preferred = deviceRepository.getPreferredDevice()
-            if (preferred != null && connectionManager.connectionState.value == DeviceConnectionState.DISCONNECTED) {
+            if (preferred != null &&
+                preferred.protocolType == com.example.core.model.ProtocolType.ANDROID_TV_REMOTE_V2 &&
+                !preferred.serverCertSha256.isNullOrBlank() &&
+                connectionManager.connectionState.value == DeviceConnectionState.DISCONNECTED
+            ) {
                 connectionManager.connect(preferred)
             }
         }

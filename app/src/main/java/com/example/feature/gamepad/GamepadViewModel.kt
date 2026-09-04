@@ -9,8 +9,7 @@ import com.example.core.model.ControllerMode
 import com.example.core.model.ControllerProfile
 import com.example.core.model.DeviceConnectionState
 import com.example.core.model.GamepadState
-import com.example.core.model.LobbySlotInfo
-import com.example.core.model.MotionSteeringConfig
+import com.example.core.model.PlayerSlotInfo
 import com.example.core.model.PlayerSlot
 import com.example.core.model.TvCommand
 import com.example.core.model.TvDevice
@@ -31,8 +30,8 @@ data class GamepadUiState(
     val connectedDevice: TvDevice? = null,
     val isConnected: Boolean = false,
     val activePlayerSlot: PlayerSlot = PlayerSlot.PLAYER_1,
-    val lobbySlots: List<LobbySlotInfo> = emptyList(),
-    val isLobbySheetOpen: Boolean = false,
+    val playerSlots: List<PlayerSlotInfo> = emptyList(),
+    val isPlayerSheetOpen: Boolean = false,
     val activeMode: ControllerMode = ControllerMode.STANDARD,
     val activeProfile: ControllerProfile = ControllerProfile.DEFAULT_STANDARD,
     val savedProfiles: List<ControllerProfile> = emptyList(),
@@ -52,7 +51,7 @@ class GamepadViewModel : ViewModel() {
     private val connectionManager = app.connectionManager
     private val profileRepository = app.controllerProfileRepository
     private val steeringEngine = app.motionSteeringEngine
-    private val lobbyManager = app.multiplayerLobbyManager
+    private val playerSlotManager = app.playerSlotManager
     private val haptics = app.hapticFeedbackHelper
 
     private val _activeMode = MutableStateFlow(ControllerMode.STANDARD)
@@ -64,7 +63,7 @@ class GamepadViewModel : ViewModel() {
     private val _gasPedal = MutableStateFlow(0f)
     private val _brakePedal = MutableStateFlow(0f)
     private val _currentGear = MutableStateFlow(1)
-    private val _isLobbySheetOpen = MutableStateFlow(false)
+    private val _isPlayerSheetOpen = MutableStateFlow(false)
 
     private val currentGamepadState = GamepadState()
     private var turboJob: Job? = null
@@ -72,12 +71,12 @@ class GamepadViewModel : ViewModel() {
     val uiState: StateFlow<GamepadUiState> = combine(
         combine(
             connectionManager.connectedDevice,
-            lobbyManager.activeSlot,
-            lobbyManager.lobbySlots,
-            _isLobbySheetOpen,
+            playerSlotManager.activeSlot,
+            playerSlotManager.playerSlots,
+            _isPlayerSheetOpen,
             _activeMode
-        ) { dev, slot, lSlots, lobbyOpen, mode ->
-            FiveParams(dev, slot, lSlots, lobbyOpen, mode)
+        ) { dev, slot, pSlots, playerSheetOpen, mode ->
+            FiveParams(dev, slot, pSlots, playerSheetOpen, mode)
         },
         combine(
             _activeProfile,
@@ -99,8 +98,8 @@ class GamepadViewModel : ViewModel() {
     ) { p1, p2, p3 ->
         val dev = p1.dev
         val slot = p1.slot
-        val lSlots = p1.lSlots
-        val lobbyOpen = p1.lobbyOpen
+        val pSlots = p1.pSlots
+        val playerSheetOpen = p1.playerSheetOpen
         val mode = p1.mode
 
         val profile = p2.profile
@@ -118,8 +117,8 @@ class GamepadViewModel : ViewModel() {
             connectedDevice = dev,
             isConnected = dev?.connectionState == DeviceConnectionState.CONNECTED,
             activePlayerSlot = slot,
-            lobbySlots = lSlots,
-            isLobbySheetOpen = lobbyOpen,
+            playerSlots = pSlots,
+            isPlayerSheetOpen = playerSheetOpen,
             activeMode = mode,
             activeProfile = profile,
             savedProfiles = saved,
@@ -141,8 +140,8 @@ class GamepadViewModel : ViewModel() {
     private data class FiveParams(
         val dev: TvDevice?,
         val slot: PlayerSlot,
-        val lSlots: List<LobbySlotInfo>,
-        val lobbyOpen: Boolean,
+        val pSlots: List<PlayerSlotInfo>,
+        val playerSheetOpen: Boolean,
         val mode: ControllerMode
     )
 
@@ -182,30 +181,30 @@ class GamepadViewModel : ViewModel() {
     }
 
     fun selectPlayerSlot(slot: PlayerSlot) {
-        lobbyManager.setPlayerSlot(slot)
+        playerSlotManager.setPlayerSlot(slot)
         currentGamepadState.playerSlot = slot
         sendGamepadUpdate()
     }
 
-    fun testRumble(slot: PlayerSlot = lobbyManager.activeSlot.value) {
-        lobbyManager.testRumble(slot)
+    fun testRumble(slot: PlayerSlot = playerSlotManager.activeSlot.value) {
+        playerSlotManager.testRumble(slot)
     }
 
-    fun openLobbySheet() {
-        _isLobbySheetOpen.value = true
+    fun openPlayerSheet() {
+        _isPlayerSheetOpen.value = true
         haptics.performClick()
     }
 
-    fun closeLobbySheet() {
-        _isLobbySheetOpen.value = false
+    fun closePlayerSheet() {
+        _isPlayerSheetOpen.value = false
     }
 
     private fun sendGamepadUpdate() {
-        currentGamepadState.playerSlot = lobbyManager.activeSlot.value
+        currentGamepadState.playerSlot = playerSlotManager.activeSlot.value
         connectionManager.sendCommand(
             TvCommand.GamepadUpdate(
                 state = currentGamepadState,
-                playerSlot = lobbyManager.activeSlot.value
+                playerSlot = playerSlotManager.activeSlot.value
             )
         )
     }
@@ -300,8 +299,9 @@ class GamepadViewModel : ViewModel() {
 
     fun setControllerMode(mode: ControllerMode) {
         _activeMode.value = mode
+        // The engine's config (including user sensitivity) is managed centrally
+        // by SettingsRepository in TVGripApplication, so do not overwrite it here.
         if (mode == ControllerMode.RACING_STEERING) {
-            steeringEngine.config = MotionSteeringConfig(sensitivity = _activeProfile.value.steeringSensitivity)
             steeringEngine.start()
         } else {
             steeringEngine.stop()
@@ -357,9 +357,23 @@ class GamepadViewModel : ViewModel() {
         turboJob = null
     }
 
+    private fun releasePressedButtons() {
+        currentGamepadState.buttons.filterValues { it }.forEach { (button, _) ->
+            val mappedKey = _activeProfile.value.mapping[button] ?: button.defaultTvKey
+            connectionManager.sendCommand(TvCommand.KeyUp(mappedKey))
+        }
+        currentGamepadState.buttons.replaceAll { _, _ -> false }
+    }
+
+    /** Stops motion/steering sensor polling when the app leaves the foreground. */
+    fun stopForegroundSensors() {
+        steeringEngine.stop()
+    }
+
     override fun onCleared() {
         super.onCleared()
         steeringEngine.stop()
         stopTurboLoop()
+        releasePressedButtons()
     }
 }

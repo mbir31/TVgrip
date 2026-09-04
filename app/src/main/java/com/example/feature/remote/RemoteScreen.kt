@@ -3,10 +3,11 @@ package com.example.feature.remote
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +50,7 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +67,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.core.model.CapabilityLevel
@@ -98,6 +103,16 @@ fun RemoteScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                viewModel.stopForegroundSensors()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Box(
         modifier = modifier
@@ -253,7 +268,7 @@ private fun ClassicRemoteView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Point phone at TV to move cursor",
+                        text = "Move phone to navigate the TV",
                         color = GripCyan,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -473,6 +488,7 @@ private fun MinimalRemoteView(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TouchpadRemoteView(
     state: RemoteUiState,
@@ -532,13 +548,11 @@ private fun TouchpadRemoteView(
                         onSendPointerDelta(dragAmount.x, dragAmount.y)
                     }
                 }
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { onSendPointerClick(false) },
-                        onDoubleTap = { onSendPointerClick(false) },
-                        onLongPress = { onSendPointerClick(true) }
-                    )
-                },
+                .combinedClickable(
+                    onClick = { onSendPointerClick(false) },
+                    onDoubleClick = { onSendPointerClick(false) },
+                    onLongClick = { onSendPointerClick(true) }
+                ),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -550,7 +564,7 @@ private fun TouchpadRemoteView(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Slide to Move Pointer · Tap to Click",
+                    text = "Slide to Navigate · Tap to Select",
                     color = GripTextSecondary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium
@@ -560,17 +574,17 @@ private fun TouchpadRemoteView(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Bottom Left/Right Click bar + Home
+        // Bottom Select / Long-press bar + Home
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             TactileButton(
                 onClick = { onSendPointerClick(false) },
-                text = "LEFT CLICK",
+                text = "SELECT",
                 isPrimary = true,
                 modifier = Modifier.weight(1.2f).height(54.dp),
-                testTag = "touchpad_left_click"
+                testTag = "touchpad_select"
             )
             Spacer(modifier = Modifier.width(10.dp))
             TactileButton(
@@ -582,9 +596,9 @@ private fun TouchpadRemoteView(
             Spacer(modifier = Modifier.width(10.dp))
             TactileButton(
                 onClick = { onSendPointerClick(true) },
-                text = "RIGHT CLICK",
+                text = "LONG PRESS",
                 modifier = Modifier.weight(1.2f).height(54.dp),
-                testTag = "touchpad_right_click"
+                testTag = "touchpad_long_press"
             )
         }
     }

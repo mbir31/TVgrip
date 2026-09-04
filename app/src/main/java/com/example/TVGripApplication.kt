@@ -1,6 +1,12 @@
 package com.example
 
 import android.app.Application
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import com.example.core.data.local.TVGripDatabase
 import com.example.core.data.repository.ControllerProfileRepository
 import com.example.core.data.repository.SettingsRepository
@@ -9,7 +15,7 @@ import com.example.core.haptics.HapticFeedbackHelper
 import com.example.core.network.NetworkMonitor
 import com.example.core.network.TvConnectionManager
 import com.example.core.network.TvDiscoveryManager
-import com.example.core.multiplayer.MultiplayerLobbyManager
+import com.example.core.gamepad.PlayerSlotManager
 import com.example.core.sensors.AirMouseEngine
 import com.example.core.sensors.MotionSteeringEngine
 import com.example.core.voice.VoiceInputManager
@@ -40,7 +46,7 @@ class TVGripApplication : Application() {
     lateinit var hapticFeedbackHelper: HapticFeedbackHelper
         private set
 
-    lateinit var multiplayerLobbyManager: MultiplayerLobbyManager
+    lateinit var playerSlotManager: PlayerSlotManager
         private set
 
     lateinit var airMouseEngine: AirMouseEngine
@@ -51,6 +57,8 @@ class TVGripApplication : Application() {
 
     lateinit var voiceInputManager: VoiceInputManager
         private set
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
@@ -64,23 +72,41 @@ class TVGripApplication : Application() {
         connectionManager = TvConnectionManager.getInstance()
         discoveryManager = TvDiscoveryManager(this)
         networkMonitor = NetworkMonitor(this)
+        appScope.launch {
+            networkMonitor.networkStatusFlow
+                .map { it.isConnected && (it.isWifi || it.isEthernet) }
+                .distinctUntilChanged()
+                .collect { isAvailable ->
+                    connectionManager.onNetworkChanged(isAvailable)
+                }
+        }
         hapticFeedbackHelper = HapticFeedbackHelper(this)
-        multiplayerLobbyManager = MultiplayerLobbyManager(this, hapticFeedbackHelper)
+        playerSlotManager = PlayerSlotManager(this, hapticFeedbackHelper)
         airMouseEngine = AirMouseEngine(this, connectionManager)
         motionSteeringEngine = MotionSteeringEngine(this)
         voiceInputManager = VoiceInputManager(this)
+
+        appScope.launch {
+            settingsRepository.settingsFlow.collect { settings ->
+                hapticFeedbackHelper.isHapticsEnabled = settings.hapticFeedbackEnabled
+                airMouseEngine.lowPowerMode = settings.batterySaverMode
+                airMouseEngine.config = settings.airMouseConfig
+                motionSteeringEngine.lowPowerMode = settings.batterySaverMode
+                motionSteeringEngine.config = settings.motionSteeringConfig
+            }
+        }
     }
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         if (level >= TRIM_MEMORY_MODERATE) {
-            multiplayerLobbyManager.cleanupInactivePeers()
+            playerSlotManager.cleanupInactivePresets()
         }
     }
 
     override fun onLowMemory() {
         super.onLowMemory()
-        multiplayerLobbyManager.cleanupInactivePeers()
+        playerSlotManager.cleanupInactivePresets()
     }
 
     companion object {

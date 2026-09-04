@@ -1,5 +1,10 @@
 # ProGuard / R8 Optimization Rules for TVGrip
 
+# BouncyCastle is loaded reflectively for client-certificate generation.
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**
+-keep class org.bouncycastle.jce.provider.BouncyCastleProvider { *; }
+
 -dontwarn com.google.firebase.**
 -dontwarn retrofit2.**
 -dontwarn okhttp3.**

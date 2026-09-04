@@ -6,7 +6,6 @@ import com.example.TVGripApplication
 import com.example.core.model.DeviceConnectionState
 import com.example.core.model.TvCommand
 import com.example.core.model.TvDevice
-import com.example.core.model.TvKey
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,9 +38,9 @@ class DiagnosticsViewModel : ViewModel() {
     private val _lastTestResult = MutableStateFlow<String?>(null)
     private val _logs = MutableStateFlow<List<String>>(
         listOf(
-            "TVGrip Production Network Diagnostic Initialized",
-            "NsdManager DNS-SD Browser Active",
-            "Android TV Remote v2 TLS Engine Loaded"
+            "TVGrip Network Diagnostic Initialized",
+            "Android TV Remote v2 protocol loaded",
+            "NSD discovery ready"
         )
     )
 
@@ -101,9 +100,9 @@ class DiagnosticsViewModel : ViewModel() {
     }
 
     /**
-     * Phase 31: REAL COMMAND VERIFICATION TEST
-     * Transmits a real verification command (reversible UP/DOWN or D-Pad) to the TV socket
-     * and reports verifiable transmission status.
+     * Transport diagnostic: writes a protocol ping frame to the active remote
+     * socket. This verifies the write path only; it cannot prove the TV acted
+     * on a key until a human observes the TV.
      */
     fun runCommandVerificationTest() {
         haptics.performClick()
@@ -115,18 +114,19 @@ class DiagnosticsViewModel : ViewModel() {
         }
 
         _isTestingCommand.value = true
-        _lastTestResult.value = "Transmitting test key event over TLS transport..."
-        addLog("Initiating Real Command Test (Ping & D-Pad packet verification)...")
+        _lastTestResult.value = "Sending protocol ping..."
+        addLog("Initiating transport test (remote_ping_request).")
 
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
-            // Send test command (Ping opcode)
             connectionManager.sendCommand(TvCommand.Ping)
-            delay(150)
+            delay(400)
             val duration = System.currentTimeMillis() - startTime
             _isTestingCommand.value = false
-            _lastTestResult.value = "Command transmitted successfully over active session (${duration}ms transport loop)."
-            addLog("Real Command Test: Packet confirmed serialized and pushed to socket.")
+            _lastTestResult.value =
+                "Protocol ping written to the TLS socket (${duration}ms local write loop). " +
+                    "Check the TV for the expected remote effect to complete on-device verification."
+            addLog("Transport test: remote_ping_request frame written.")
         }
     }
 

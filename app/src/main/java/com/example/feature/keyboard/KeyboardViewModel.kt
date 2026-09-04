@@ -23,6 +23,7 @@ data class KeyboardUiState(
     val voiceError: String? = null,
     val isMasked: Boolean = false,
     val liveTypingEnabled: Boolean = false,
+    val isAirMouseActive: Boolean = false,
     val recentPhrases: List<String> = listOf("Netflix", "YouTube", "Spotify", "Action Movies", "Sci-Fi", "4K HDR")
 )
 
@@ -32,18 +33,27 @@ class KeyboardViewModel : ViewModel() {
     private val connectionManager = app.connectionManager
     private val voiceManager = app.voiceInputManager
     private val haptics = app.hapticFeedbackHelper
+    private val airMouseEngine = app.airMouseEngine
 
     private val _inputText = MutableStateFlow("")
     private val _isMasked = MutableStateFlow(false)
     private val _liveTypingEnabled = MutableStateFlow(false)
+    private val _isAirMouseActive = MutableStateFlow(false)
 
     val uiState: StateFlow<KeyboardUiState> = combine(
         connectionManager.connectedDevice,
         _inputText,
         voiceManager.voiceState,
         _isMasked,
-        _liveTypingEnabled
-    ) { device, text, vState, masked, liveTyping ->
+        _liveTypingEnabled,
+        _isAirMouseActive
+    ) { params: Array<Any?> ->
+        val device = params[0] as? TvDevice
+        val text = params[1] as String
+        val vState = params[2] as VoiceState
+        val masked = params[3] as Boolean
+        val liveTyping = params[4] as Boolean
+        val airMouse = params[5] as Boolean
         val isListening = vState is VoiceState.Listening
         val voiceErr = if (vState is VoiceState.Error) vState.message else null
         KeyboardUiState(
@@ -52,7 +62,8 @@ class KeyboardViewModel : ViewModel() {
             isListeningVoice = isListening,
             voiceError = voiceErr,
             isMasked = masked,
-            liveTypingEnabled = liveTyping
+            liveTypingEnabled = liveTyping,
+            isAirMouseActive = airMouse
         )
     }.stateIn(
         scope = viewModelScope,
@@ -145,8 +156,32 @@ class KeyboardViewModel : ViewModel() {
         }
     }
 
+    fun toggleAirMouse() {
+        val newState = !_isAirMouseActive.value
+        _isAirMouseActive.value = newState
+        if (newState) {
+            airMouseEngine.start()
+            haptics.performSuccess()
+        } else {
+            airMouseEngine.stop()
+            haptics.performClick()
+        }
+    }
+
+    /** Stops voice/listening and foreground sensors when the app leaves the foreground. */
+    fun stopForegroundSensors() {
+        if (_isAirMouseActive.value) {
+            _isAirMouseActive.value = false
+        }
+        airMouseEngine.stop()
+        if (voiceManager.voiceState.value is VoiceState.Listening) {
+            voiceManager.stopListening()
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         voiceManager.stopListening()
+        airMouseEngine.stop()
     }
 }
