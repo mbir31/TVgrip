@@ -29,7 +29,15 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace --no-daemon
+        run: |
+          set +e
+          gradle :app:assembleDebug --stacktrace --no-daemon > /tmp/build.log 2>&1
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            grep -E "e: |> Task|error:|FAILURE|Caused by|Could not|Compilation error|Unresolved" /tmp/build.log | tail -n 40 | while IFS= read -r line; do echo "::error::${line}"; done
+            tail -n 60 /tmp/build.log
+            exit $rc
+          fi
 
       - name: Run unit tests
         run: gradle :app:testDebugUnitTest --stacktrace --no-daemon
