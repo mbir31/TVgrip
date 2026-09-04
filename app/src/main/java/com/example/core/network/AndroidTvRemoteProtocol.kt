@@ -606,8 +606,9 @@ class AndroidTvRemoteProtocol(
     private fun sendPingRequest() {
         val stream = outputStream ?: return
         pingRequestSentAtMs = System.currentTimeMillis()
+        val pingVal1 = (System.currentTimeMillis() and 0x7FFFFFFFL).toInt()
         val ping = ByteArrayOutputStream().apply {
-            writeVarintField(this, 1, System.currentTimeMillis().toInt().toLong()) // val1
+            writeVarintField(this, 1, pingVal1.toLong()) // val1
             writeVarintField(this, 2, 0L) // val2
         }.toByteArray()
         val outer = ByteArrayOutputStream().apply {

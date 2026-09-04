@@ -286,12 +286,16 @@ class TvConnectionManager {
             // connecting to a different device, or after an intentional disconnect.
             return
         }
+        val lostProtocol = activeProtocol
+        // If the protocol was already torn down (e.g. by a network-loss handler),
+        // there is nothing to recover here; that handler owns the reconnect.
+        if (lostProtocol == null) return
+
         val device = desiredDevice ?: _connectedDevice.value ?: return
 
-        val lostProtocol = activeProtocol
         activeProtocol = null
         generation += 1
-        scope.launch { try { lostProtocol?.disconnect() } catch (_: Exception) {} }
+        scope.launch { try { lostProtocol.disconnect() } catch (_: Exception) {} }
         stopPingLoop()
         _connectionState.value = DeviceConnectionState.RECONNECTING
         _connectedDevice.value = device.copy(connectionState = DeviceConnectionState.RECONNECTING)

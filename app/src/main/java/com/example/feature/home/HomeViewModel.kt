@@ -52,7 +52,11 @@ class HomeViewModel : ViewModel() {
             val settings = app.settingsRepository.settingsFlow.first()
             if (!settings.autoReconnect) return@launch
             val preferred = deviceRepository.getPreferredDevice()
-            if (preferred != null && connectionManager.connectionState.value == DeviceConnectionState.DISCONNECTED) {
+            if (preferred != null &&
+                preferred.protocolType == com.example.core.model.ProtocolType.ANDROID_TV_REMOTE_V2 &&
+                !preferred.serverCertSha256.isNullOrBlank() &&
+                connectionManager.connectionState.value == DeviceConnectionState.DISCONNECTED
+            ) {
                 connectionManager.connect(preferred)
             }
         }
