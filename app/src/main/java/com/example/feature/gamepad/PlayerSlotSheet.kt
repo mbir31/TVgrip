@@ -147,7 +147,7 @@ fun PlayerSlotSheet(
             Spacer(modifier = Modifier.height(10.dp))
 
             // Player Slot Cards
-            slots.forEach { slotInfo ->
+            playerSlots.forEach { slotInfo ->
                 val isCurrent = slotInfo.slot == activeSlot
                 val slotColor = Color(slotInfo.slot.colorHex)
 

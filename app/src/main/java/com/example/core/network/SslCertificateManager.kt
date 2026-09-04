@@ -63,7 +63,7 @@ object SslCertificateManager {
 
     // Robolectric/JVM fallback identity (never persisted).
     @Volatile
-    private var fallbackKeyPair: KeyPair? = null
+    private var fallbackKeyPair: KeyPairHolder? = null
 
     init {
         if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
