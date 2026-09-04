@@ -37,7 +37,9 @@ class AndroidTvRemoteProtocolUnitTest {
     @Test
     fun `decodes remote configure code1`() {
         // RemoteMessage.remote_configure (field 1) -> RemoteConfigure.code1 = 615
-        val configure = lengthDelimited(1, varint(615))
+        // The nested RemoteConfigure payload begins with its own field 1 varint tag.
+        val configurePayload = byteArrayOf(0x08) + varint(615)
+        val configure = lengthDelimited(1, configurePayload)
         val parsed = RemoteMessageDecoder.decode(configure)
         assertTrue(parsed.hasConfigure)
         assertEquals(615, parsed.configureCode1)
@@ -55,8 +57,9 @@ class AndroidTvRemoteProtocolUnitTest {
 
     @Test
     fun `decodes remote ping request and ime batch counters`() {
-        val ping = lengthDelimited(8, varint(99))
-        val parsedPing = RemoteMessageDecoder.decode(ping)
+        // RemotePingRequest (field 8) -> val1 = 99 nested under its own field 1 tag.
+        val pingPayload = byteArrayOf(0x08) + varint(99)
+        val parsedPing = RemoteMessageDecoder.decode(lengthDelimited(8, pingPayload))
         assertTrue(parsedPing.hasPingRequest)
         assertEquals(99, parsedPing.pingRequestVal1)
 
@@ -70,7 +73,9 @@ class AndroidTvRemoteProtocolUnitTest {
 
     @Test
     fun `decodes remote ping response`() {
-        val parsed = RemoteMessageDecoder.decode(lengthDelimited(9, varint(42)))
+        // RemotePingResponse (field 9) -> val1 = 42 nested under its own field 1 tag.
+        val payload = byteArrayOf(0x08) + varint(42)
+        val parsed = RemoteMessageDecoder.decode(lengthDelimited(9, payload))
         assertTrue(parsed.hasPingResponse)
         assertEquals(42, parsed.pingResponseVal1)
     }
