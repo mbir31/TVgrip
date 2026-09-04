@@ -94,9 +94,10 @@ class TvDiscoveryManager(private val context: Context) {
             }
 
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-                Log.d(TAG, "Service lost: ${serviceInfo.serviceName}")
+                val cleanName = serviceInfo.serviceName.replace("\\032", " ").trim()
+                Log.d(TAG, "Service lost: $cleanName")
                 _discoveredDevices.update { list ->
-                    list.filterNot { it.name == serviceInfo.serviceName }
+                    list.filterNot { it.name == cleanName || it.host == serviceInfo.host?.hostAddress }
                 }
             }
 
