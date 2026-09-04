@@ -31,8 +31,19 @@ class RemoteMessageEncoderUnitTest {
         val text = "abc"
         val body = RemoteMessageEncoder.imeBatchEditMessage(text, imeCounter = 0, imeFieldCounter = 0)
         // cursor = 2 appears twice as varint(2); both start and end are field 1/2.
-        assertTrue(body.contains(byteArrayOf(0x08, 0x02)))
-        assertTrue(body.contains(byteArrayOf(0x10, 0x02)))
+        assertTrue(containsSubsequence(body, byteArrayOf(0x08, 0x02)))
+        assertTrue(containsSubsequence(body, byteArrayOf(0x10, 0x02)))
+    }
+
+    private fun containsSubsequence(body: ByteArray, needle: ByteArray): Boolean {
+        if (needle.isEmpty() || needle.size > body.size) return false
+        outer@ for (start in 0..body.size - needle.size) {
+            for (i in needle.indices) {
+                if (body[start + i] != needle[i]) continue@outer
+            }
+            return true
+        }
+        return false
     }
 
     private fun containsText(body: ByteArray, text: String): Boolean {
