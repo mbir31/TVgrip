@@ -28,6 +28,17 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
+      - name: Generate CI release key
+        run: |
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -v \
+            -keystore "$HOME/.android/tvgrip-ci-upload.jks" \
+            -alias upload \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=TVGrip CI, OU=CI, O=TVGrip, L=Dhaka, ST=Dhaka, C=BD"
+          echo "Generated CI release keystore."
+
       - name: Build debug APK
         run: |
           set +e
@@ -35,6 +46,20 @@ jobs:
           rc=$?
           if [ $rc -ne 0 ]; then
             grep -E "^e: |error:|FAILURE|Caused by|Unresolved|Cannot|Incompatible|actual type|No value passed|not applicable" /tmp/build.log | head -n 40 | while IFS= read -r line; do echo "::error::${line}"; done
+            exit $rc
+          fi
+
+      - name: Build release APK (R8 minify)
+        run: |
+          set +e
+          export KEYSTORE_PATH="$HOME/.android/tvgrip-ci-upload.jks"
+          export STORE_PASSWORD=android
+          export KEY_PASSWORD=android
+          gradle :app:assembleRelease --stacktrace --no-daemon > /tmp/release.log 2>&1
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            grep -E "^e: |error:|FAILURE|Caused by|Unresolved|Cannot|Incompatible|missing|not found|Missing" /tmp/release.log | head -n 50 | while IFS= read -r line; do echo "::error::${line}"; done
+            tail -n 50 /tmp/release.log
             exit $rc
           fi
 
@@ -60,9 +85,11 @@ jobs:
             exit $rc
           fi
 
-      - name: Upload debug APK
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: TVGrip-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: TVGrip-apks
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
