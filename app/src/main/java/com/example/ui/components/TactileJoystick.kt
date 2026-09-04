@@ -23,6 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -57,13 +58,15 @@ fun TactileJoystick(
     testTag: String = "tactile_joystick"
 ) {
     val haptics = remember { runCatching { TVGripApplication.instance.hapticFeedbackHelper }.getOrNull() }
+    val density = LocalDensity.current
 
     var thumbOffsetX by remember { mutableFloatStateOf(0f) }
     var thumbOffsetY by remember { mutableFloatStateOf(0f) }
     var isDragging by remember { mutableStateOf(false) }
 
-    val baseRadiusPx = (size.value * 1.5f) // approximate pixel ratio for range calculation
-    val maxDragDistance = baseRadiusPx * 0.45f
+    // Convert the joystick Dp size to pixels so dragAmount (reported in px) is
+    // normalized correctly across screen densities.
+    val maxDragDistance = with(density) { size.toPx() } * 0.45f
 
     Box(
         modifier = modifier

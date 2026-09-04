@@ -114,6 +114,7 @@ class TvPairingService(private val context: Context) {
                     pairingPort,
                     true
                 ) as SSLSocket
+                sslSocket.soTimeout = 20000
                 sslSocket.startHandshake()
 
                 if (capturedServerCert == null) {
