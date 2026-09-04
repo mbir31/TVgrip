@@ -85,6 +85,13 @@ class TVGripApplication : Application() {
         airMouseEngine = AirMouseEngine(this, connectionManager)
         motionSteeringEngine = MotionSteeringEngine(this)
         voiceInputManager = VoiceInputManager(this)
+
+        appScope.launch {
+            settingsRepository.settingsFlow.collect { settings ->
+                airMouseEngine.lowPowerMode = settings.batterySaverMode
+                motionSteeringEngine.lowPowerMode = settings.batterySaverMode
+            }
+        }
     }
 
     override fun onTrimMemory(level: Int) {

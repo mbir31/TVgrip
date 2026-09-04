@@ -101,7 +101,7 @@ fun AboutScreen(
                 )
 
                 Text(
-                    text = "Tactile 3D TV Remote & Ultra-Low-Latency Game Controller",
+                    text = "Tactile 3D TV Remote & Game Controller",
                     color = GripCyan,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
