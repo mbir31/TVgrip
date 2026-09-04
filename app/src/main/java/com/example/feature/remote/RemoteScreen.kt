@@ -3,10 +3,11 @@ package com.example.feature.remote
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -473,6 +474,7 @@ private fun MinimalRemoteView(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TouchpadRemoteView(
     state: RemoteUiState,
@@ -532,13 +534,11 @@ private fun TouchpadRemoteView(
                         onSendPointerDelta(dragAmount.x, dragAmount.y)
                     }
                 }
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { onSendPointerClick(false) },
-                        onDoubleTap = { onSendPointerClick(false) },
-                        onLongPress = { onSendPointerClick(true) }
-                    )
-                },
+                .combinedClickable(
+                    onClick = { onSendPointerClick(false) },
+                    onDoubleClick = { onSendPointerClick(false) },
+                    onLongClick = { onSendPointerClick(true) }
+                ),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
