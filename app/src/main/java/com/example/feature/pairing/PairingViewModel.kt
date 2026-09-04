@@ -201,10 +201,16 @@ class PairingViewModel : ViewModel() {
                     ?: "Pairing succeeded but the remote control session could not be established."
                 _step.value = PairingStep.ERROR
             }
-            DeviceConnectionState.CONNECTED, DeviceConnectionState.RECONNECTING, null -> {
+            DeviceConnectionState.CONNECTED, DeviceConnectionState.RECONNECTING -> {
                 _step.value = PairingStep.READY
             }
-            else -> _step.value = PairingStep.READY
+            null -> {
+                _errorMessage.value =
+                    "Pairing succeeded, but the Android TV Remote session did not become ready within 15 seconds. " +
+                        "Make sure the TV is still on the same Wi-Fi network and press Retry to reconnect."
+                _step.value = PairingStep.ERROR
+            }
+            else -> _step.value = PairingStep.ERROR
         }
     }
 

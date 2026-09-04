@@ -229,7 +229,7 @@ fun PlayerSlotSheet(
                                     Spacer(modifier = Modifier.width(8.dp))
 
                                     Text(
-                                        text = if (isCurrent) "Preset ${slotInfo.slot.slotIndex + 1} • 8ms • ${slotInfo.slot.accentName}" else "Preset ${slotInfo.slot.slotIndex + 1} • Local",
+                                        text = if (isCurrent) "Preset ${slotInfo.slot.slotIndex + 1} • Local • ${slotInfo.slot.accentName}" else "Preset ${slotInfo.slot.slotIndex + 1} • Local",
                                         color = GripTextSecondary,
                                         fontSize = 12.sp
                                     )

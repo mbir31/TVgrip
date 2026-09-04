@@ -58,7 +58,7 @@ class PlayerSlotManager(
                     deviceName = "$deviceModel (This Phone)",
                     isLocalDevice = true,
                     isOccupied = true,
-                    pingMs = 8L,
+                    pingMs = 0L,
                     batteryPercent = 95
                 )
             } else {

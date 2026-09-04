@@ -677,7 +677,7 @@ private fun StepReady(
         Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "${device?.name ?: "TV"} is paired and connected. Press a button to verify it responds on the TV.",
+            text = "${device?.name ?: "TV"} is paired. Press a button to verify it responds on the TV.",
             color = GripTextSecondary,
             fontSize = 14.sp,
             textAlign = TextAlign.Center
