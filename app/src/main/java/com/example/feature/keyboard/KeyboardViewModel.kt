@@ -47,7 +47,13 @@ class KeyboardViewModel : ViewModel() {
         _isMasked,
         _liveTypingEnabled,
         _isAirMouseActive
-    ) { device, text, vState, masked, liveTyping, airMouse ->
+    ) { params: Array<Any?> ->
+        val device = params[0] as? TvDevice
+        val text = params[1] as String
+        val vState = params[2] as VoiceState
+        val masked = params[3] as Boolean
+        val liveTyping = params[4] as Boolean
+        val airMouse = params[5] as Boolean
         val isListening = vState is VoiceState.Listening
         val voiceErr = if (vState is VoiceState.Error) vState.message else null
         KeyboardUiState(
