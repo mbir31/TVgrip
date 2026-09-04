@@ -736,8 +736,8 @@ internal class RemoteMessageDecoder private constructor(
                 while (offset < bytes.size) {
                     val tag = readVarint(bytes, offset)
                     offset = tag.second
-                    val field = tag.first ushr 3
-                    val wire = tag.first and 0x07
+                    val field = (tag.first ushr 3).toInt()
+                    val wire = (tag.first and 0x07).toInt()
                     when (wire) {
                         0 -> {
                             val v = readVarint(bytes, offset)
@@ -809,8 +809,8 @@ internal class RemoteMessageDecoder private constructor(
             while (offset < end) {
                 val tag = readVarint(bytes, offset)
                 offset = tag.second
-                val field = tag.first ushr 3
-                val wire = tag.first and 0x07
+                val field = (tag.first ushr 3).toInt()
+                val wire = (tag.first and 0x07).toInt()
                 if (wire == 0) {
                     val v = readVarint(bytes, offset)
                     offset = v.second
@@ -829,8 +829,8 @@ internal class RemoteMessageDecoder private constructor(
             while (offset < end) {
                 val tag = readVarint(bytes, offset)
                 offset = tag.second
-                val field = tag.first ushr 3
-                val wire = tag.first and 0x07
+                val field = (tag.first ushr 3).toInt()
+                val wire = (tag.first and 0x07).toInt()
                 if (wire == 0) {
                     val v = readVarint(bytes, offset)
                     offset = v.second
@@ -850,8 +850,8 @@ internal class RemoteMessageDecoder private constructor(
             while (offset < end) {
                 val tag = readVarint(bytes, offset)
                 offset = tag.second
-                val field = tag.first ushr 3
-                val wire = tag.first and 0x07
+                val field = (tag.first ushr 3).toInt()
+                val wire = (tag.first and 0x07).toInt()
                 if (wire == 0) {
                     val v = readVarint(bytes, offset)
                     offset = v.second
@@ -872,8 +872,8 @@ internal class RemoteMessageDecoder private constructor(
             while (offset < end) {
                 val tag = readVarint(bytes, offset)
                 offset = tag.second
-                val field = tag.first ushr 3
-                val wire = tag.first and 0x07
+                val field = (tag.first ushr 3).toInt()
+                val wire = (tag.first and 0x07).toInt()
                 if (wire == 0) {
                     val v = readVarint(bytes, offset)
                     offset = v.second
