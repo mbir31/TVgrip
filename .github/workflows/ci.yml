@@ -39,10 +39,26 @@ jobs:
           fi
 
       - name: Run unit tests
-        run: gradle :app:testDebugUnitTest --stacktrace --no-daemon
+        run: |
+          set +e
+          gradle :app:testDebugUnitTest --stacktrace --no-daemon > /tmp/test.log 2>&1
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            grep -E "FAILED|expected:|but was:|AssertionError|Tests with failures|> There were|e: |error:" /tmp/test.log | head -n 40 | while IFS= read -r line; do echo "::error::${line}"; done
+            tail -n 40 /tmp/test.log
+            exit $rc
+          fi
 
       - name: Run lint
-        run: gradle :app:lintDebug --stacktrace --no-daemon
+        run: |
+          set +e
+          gradle :app:lintDebug --stacktrace --no-daemon > /tmp/lint.log 2>&1
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            grep -E "Lint found|error:|Error:|Unresolved|> Task :app:lint|FAILURE|Caused by" /tmp/lint.log | head -n 40 | while IFS= read -r line; do echo "::error::${line}"; done
+            tail -n 40 /tmp/lint.log
+            exit $rc
+          fi
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
