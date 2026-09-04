@@ -80,6 +80,7 @@ fun TactileDpad(
                 .offset(y = 12.dp),
             isPressed = activeKey == TvKey.UP,
             testTag = "dpad_up",
+            tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.UP
                 onDirectionPressChanged?.invoke(TvKey.UP, true)
@@ -106,6 +107,7 @@ fun TactileDpad(
                 .offset(y = (-12).dp),
             isPressed = activeKey == TvKey.DOWN,
             testTag = "dpad_down",
+            tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.DOWN
                 onDirectionPressChanged?.invoke(TvKey.DOWN, true)
@@ -132,6 +134,7 @@ fun TactileDpad(
                 .offset(x = 12.dp),
             isPressed = activeKey == TvKey.LEFT,
             testTag = "dpad_left",
+            tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.LEFT
                 onDirectionPressChanged?.invoke(TvKey.LEFT, true)
@@ -158,6 +161,7 @@ fun TactileDpad(
                 .offset(x = (-12).dp),
             isPressed = activeKey == TvKey.RIGHT,
             testTag = "dpad_right",
+            tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.RIGHT
                 onDirectionPressChanged?.invoke(TvKey.RIGHT, true)
@@ -209,7 +213,9 @@ fun TactileDpad(
                             onDirectionPressChanged?.invoke(TvKey.CENTER, false)
                         },
                         onTap = {
-                            onDirectionClick(TvKey.CENTER)
+                            if (onDirectionPressChanged == null) {
+                                onDirectionClick(TvKey.CENTER)
+                            }
                         }
                     )
                 },
@@ -231,6 +237,7 @@ private fun DpadSectorButton(
     modifier: Modifier = Modifier,
     isPressed: Boolean,
     testTag: String,
+    tapEmitsClick: Boolean,
     onPress: () -> Unit,
     onRelease: () -> Unit,
     onClick: () -> Unit,
@@ -255,7 +262,12 @@ private fun DpadSectorButton(
                         tryAwaitRelease()
                         onRelease()
                     },
-                    onTap = { onClick() }
+                    onTap = {
+                        // When press tracking is enabled a press/release already
+                        // performs the key. Emitting an additional SHORT click on
+                        // the same tap would double-activate the key.
+                        if (tapEmitsClick) onClick()
+                    }
                 )
             },
         contentAlignment = Alignment.Center
