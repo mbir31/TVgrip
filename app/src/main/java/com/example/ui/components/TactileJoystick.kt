@@ -77,7 +77,7 @@ fun TactileJoystick(
             .size(size)
             .testTag(testTag)
             .semantics {
-                role = Role.Adjustable
+                role = Role.Button
                 contentDescription = "$label joystick"
             }
             .shadow(10.dp, CircleShape, ambientColor = Color.Black, spotColor = Color.Black)
