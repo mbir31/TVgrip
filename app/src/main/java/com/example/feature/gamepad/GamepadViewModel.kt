@@ -365,6 +365,11 @@ class GamepadViewModel : ViewModel() {
         currentGamepadState.buttons.replaceAll { _, _ -> false }
     }
 
+    /** Stops motion/steering sensor polling when the app leaves the foreground. */
+    fun stopForegroundSensors() {
+        steeringEngine.stop()
+    }
+
     override fun onCleared() {
         super.onCleared()
         steeringEngine.stop()

@@ -27,6 +27,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,6 +58,10 @@ fun TactileTrigger(
     Box(
         modifier = modifier
             .testTag(testTag)
+            .semantics {
+                role = Role.Button
+                contentDescription = "$label trigger"
+            }
             .width(86.dp)
             .height(44.dp)
             .clip(RoundedCornerShape(12.dp))

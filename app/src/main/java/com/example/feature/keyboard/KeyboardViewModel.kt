@@ -168,6 +168,17 @@ class KeyboardViewModel : ViewModel() {
         }
     }
 
+    /** Stops voice/listening and foreground sensors when the app leaves the foreground. */
+    fun stopForegroundSensors() {
+        if (_isAirMouseActive.value) {
+            _isAirMouseActive.value = false
+        }
+        airMouseEngine.stop()
+        if (voiceManager.voiceState.value is VoiceState.Listening) {
+            voiceManager.stopListening()
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         voiceManager.stopListening()

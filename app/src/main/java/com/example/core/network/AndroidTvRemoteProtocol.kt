@@ -448,25 +448,7 @@ class AndroidTvRemoteProtocol(
         val stream = outputStream ?: return
         if (text.isEmpty()) return
         // See tronikos/androidtvremote2.remote.send_text: start/end are length-1
-        val cursor = text.length - 1
-        val imeObject = ByteArrayOutputStream().apply {
-            writeVarintField(this, 1, cursor.toLong())          // start
-            writeVarintField(this, 2, cursor.toLong())          // end
-            writeStringField(this, 3, text)                     // value
-        }.toByteArray()
-        val editInfo = ByteArrayOutputStream().apply {
-            writeVarintField(this, 1, 1L)                        // insert
-            writeLengthDelimitedField(this, 2, imeObject)        // text_field_status
-        }.toByteArray()
-        val batch = ByteArrayOutputStream().apply {
-            writeVarintField(this, 1, imeCounter.toLong())       // ime_counter
-            writeVarintField(this, 2, imeFieldCounter.toLong())  // field_counter
-            writeLengthDelimitedField(this, 3, editInfo)         // edit_info
-        }.toByteArray()
-        val outer = ByteArrayOutputStream().apply {
-            writeLengthDelimitedField(this, 21, batch) // remote_ime_batch_edit
-        }.toByteArray()
-        writeDelimited(stream, outer)
+        writeDelimited(stream, RemoteMessageEncoder.imeBatchEditMessage(text, imeCounter, imeFieldCounter))
     }
 
     private fun sendAppLink(linkOrPackage: String) {

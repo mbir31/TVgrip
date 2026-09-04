@@ -123,6 +123,14 @@ class RemoteViewModel : ViewModel() {
         haptics.performHeavyClick()
     }
 
+    /** Stops foreground sensor listening when the app leaves the foreground. */
+    fun stopForegroundSensors() {
+        if (_isAirMouseActive.value) {
+            _isAirMouseActive.value = false
+        }
+        airMouseEngine.stop()
+    }
+
     override fun onCleared() {
         super.onCleared()
         airMouseEngine.stop()

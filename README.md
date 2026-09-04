@@ -31,7 +31,7 @@ Directly installable APK available under GitHub Releases:
 
 👉 **[Download TVGrip.apk (Latest Release)](https://github.com/mbir31/TVgrip/releases/latest)**
 
-*Every push to `main` automatically compiles, packages, and publishes `TVGrip.apk` via GitHub Actions.*
+*Every push to a branch runs GitHub Actions: it builds the debug APK, builds the R8-minified release APK, runs unit tests, runs lint, and uploads both APKs as workflow artifacts. A signed public release must be published by the maintainer with a production upload key.*
 
 ---
 
@@ -86,7 +86,7 @@ Directly installable APK available under GitHub Releases:
 2. Open TVGrip and tap **Scan for TVs** (or enter your TV's IP address directly).
 3. Select your TV from the discovered device list.
 4. Enter the **6-character PIN** displayed on your TV screen.
-5. TVGrip performs mutual TLS cryptographic authentication and establishes a permanent connection.
+5. TVGrip performs mutual TLS cryptographic authentication and stores the paired TV identity. The app reconnects to that TV when the same network is available and auto-reconnect is enabled.
 
 ---
 
@@ -97,7 +97,24 @@ Directly installable APK available under GitHub Releases:
 - **Cryptography:** Android Keystore + Bouncy Castle (`bcpkix-jdk18on`, `bcprov-jdk18on`)
 - **Persistence:** AndroidX Room Database & DataStore
 - **Networking:** Mutual TLS (SSLSocket with certificate pinning), NSD (Network Service Discovery), Protobuf Wire Serialization
-- **Sensors:** Accelerometer & Gyroscope sensor fusion with complementary filtering
+- **Sensors:** Gyroscope/rotation-vector sampling with dead-zone, smoothing, and sensitivity settings (battery-saver mode reduces the sample rate)
+
+---
+
+## 🛠️ RELEASE SIGNING
+
+CI builds the release APK with a throwaway keystore so the minified build is
+verified on every push. A production release must be signed by the maintainer:
+
+```bash
+export KEYSTORE_PATH=/absolute/path/to/upload-key.jks
+export STORE_PASSWORD=...
+export KEY_PASSWORD=...
+gradle :app:bundleRelease
+```
+
+Store the real upload keystore and its passwords as GitHub Actions secrets; never
+commit a production keystore or password to the repository.
 
 ---
 

@@ -7,6 +7,7 @@ import com.example.core.model.CapabilitySet
 import com.example.core.model.DeviceConnectionState
 import com.example.core.model.ProtocolType
 import com.example.core.model.TvDevice
+import com.example.core.security.SecureValueStore
 
 @Entity(tableName = "tv_devices")
 data class TvDeviceEntity(
@@ -59,7 +60,7 @@ data class TvDeviceEntity(
             lastConnectedAt = lastConnectedAt,
             isPreferred = isPreferred,
             isFavorite = isFavorite,
-            serverCertSha256 = serverCertSha256
+            serverCertSha256 = SecureValueStore.decrypt(serverCertSha256)
         )
     }
 
@@ -91,7 +92,7 @@ data class TvDeviceEntity(
                 airMouseSupported = device.capabilities.airMouse.name,
                 gamepadSupported = device.capabilities.gameController.name,
                 motionSupported = device.capabilities.motionSteering.name,
-                serverCertSha256 = device.serverCertSha256
+                serverCertSha256 = device.serverCertSha256?.let { SecureValueStore.encrypt(it) ?: it }
             )
         }
     }

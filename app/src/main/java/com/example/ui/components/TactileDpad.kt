@@ -28,6 +28,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -80,6 +84,7 @@ fun TactileDpad(
                 .offset(y = 12.dp),
             isPressed = activeKey == TvKey.UP,
             testTag = "dpad_up",
+            accessibilityLabel = "DPAD Up",
             tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.UP
@@ -107,6 +112,7 @@ fun TactileDpad(
                 .offset(y = (-12).dp),
             isPressed = activeKey == TvKey.DOWN,
             testTag = "dpad_down",
+            accessibilityLabel = "DPAD Down",
             tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.DOWN
@@ -134,6 +140,7 @@ fun TactileDpad(
                 .offset(x = 12.dp),
             isPressed = activeKey == TvKey.LEFT,
             testTag = "dpad_left",
+            accessibilityLabel = "DPAD Left",
             tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.LEFT
@@ -161,6 +168,7 @@ fun TactileDpad(
                 .offset(x = (-12).dp),
             isPressed = activeKey == TvKey.RIGHT,
             testTag = "dpad_right",
+            accessibilityLabel = "DPAD Right",
             tapEmitsClick = onDirectionPressChanged == null,
             onPress = {
                 activeKey = TvKey.RIGHT
@@ -186,6 +194,10 @@ fun TactileDpad(
             modifier = Modifier
                 .size(76.dp)
                 .testTag("dpad_center")
+                .semantics {
+                    role = Role.Button
+                    contentDescription = "OK"
+                }
                 .shadow(8.dp, CircleShape)
                 .clip(CircleShape)
                 .background(
@@ -237,6 +249,7 @@ private fun DpadSectorButton(
     modifier: Modifier = Modifier,
     isPressed: Boolean,
     testTag: String,
+    accessibilityLabel: String,
     tapEmitsClick: Boolean,
     onPress: () -> Unit,
     onRelease: () -> Unit,
@@ -247,6 +260,10 @@ private fun DpadSectorButton(
         modifier = modifier
             .size(54.dp)
             .testTag(testTag)
+            .semantics {
+                role = Role.Button
+                contentDescription = accessibilityLabel
+            }
             .clip(CircleShape)
             .background(
                 if (isPressed) {
