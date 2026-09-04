@@ -4,9 +4,9 @@
 
 ### 🎮 Professional Low-Latency Android TV & Google TV Controller
 
-Turn your Android phone into an all-in-one smart TV remote, air mouse, motion steering wheel, keyboard, voice controller & 4-player gamepad.
+Turn your Android phone into an all-in-one Android TV / Google TV remote, keyboard, navigation touchpad, and game controller.
 
-Built natively for **Android TV, Google TV, Samsung Tizen, LG webOS & Fire TV**.
+Built natively for **Android TV and Google TV** using the Android TV Remote Service v2 protocol.
 
 <br/>
 
@@ -37,14 +37,13 @@ Directly installable APK available under GitHub Releases:
 
 ## 🌟 CORE FEATURES & ARCHITECTURE
 
-- 🎛️ **Full Smart TV Remote**: Tactile D-pad, OK, Home, Back, Source Switch, Volume & Media controls.
-- 🔐 **Mutual TLS Pairing (mTLS)**: Real SHA-256 certificate handshake with 6-character PIN exchange on TV screen using Google TV Polo Protocol (v2).
-- 📶 **High-Speed Wi-Fi Discovery**: Zero-configuration discovery using mDNS (`_androidtvremote2._tcp`, `_googlecast._tcp`) and subnet sweeps.
-- 🖱️ **Air Mouse & Trackpad**: Point and move your phone to control an on-screen mouse pointer with gyro motion smoothing.
-- 🏎️ **Motion Racing Wheel**: Tilt your phone horizontally to steer in Android TV racing games with progressive throttle/brake.
-- 🎮 **4-Player Gamepad Zone**: Connect up to 4 phones simultaneously as independent gamepads (ABXY, bumpers, triggers, dual analog sticks).
-- 🎙️ **Voice Search & Speech**: Speak into your phone to search for movies and YouTube videos on your TV.
-- ⌨️ **Native Phone Keyboard**: Type URLs, Wi-Fi passwords, and login credentials from your phone keyboard in seconds.
+- 🎛️ **Full Smart TV Remote**: Tactile D-pad, OK, Home, Back, Menu/Settings, Power, Volume, channel, and media controls using the real Android TV Remote v2 key-inject protocol.
+- 🔐 **Mutual TLS Pairing (mTLS)**: Real SHA-256 certificate handshake with the 6-character hexadecimal PIN shown on the TV through the Polo pairing protocol.
+- 📶 **Wi-Fi Discovery**: NSD/mDNS discovery of the `_androidtvremote2._tcp` service that all Android TV / Google TV devices advertise.
+- 🖱️ **Navigation Touchpad & Air Mouse**: Gyro/touch navigation drives real Android TV D-pad navigation, center-select, and page up/down actions. (The Remote v2 protocol has no absolute pointer stream; an absolute cursor would be fake.)
+- 🎮 **Game Controller**: D-pad, ABXY, shoulder buttons, triggers, Start/Select/Back/Home and stick-to-d-pad navigation are sent as genuine Android TV key events. Analog streams are not exposed by the protocol, so sticks/triggers are mapped to directional/button key events instead of fake packets.
+- 🎙️ **Voice-assisted Typing**: On-device speech recognition fills the keyboard text field, which is then injected into the TV using IME batch-edit text injection.
+- ⌨️ **Native Phone Keyboard**: Type URLs, Wi-Fi passwords, and login credentials from your phone keyboard in seconds and send them as real IME text.
 
 ---
 
@@ -58,7 +57,7 @@ Directly installable APK available under GitHub Releases:
                                │
 ┌──────────────────────────────▼──────────────────────────────┐
 │                    ViewModel & StateFlow                    │
-│      Lifecycle-Aware State • Multi-Player Lobby Manager     │
+│      Lifecycle-Aware State • Player Slot Manager            │
 └──────────────────────────────┬──────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────┐
@@ -70,12 +69,12 @@ Directly installable APK available under GitHub Releases:
 │             Android TV Remote v2 (Polo Protocol)            │
 │  • Port 6467: Mutual TLS Pairing & Challenge Auth           │
 │  • Port 6466: Protobuf Command Stream & Remote Sessions     │
-│  • Bouncy Castle X.509 2048-bit RSA Client Authentication    │
+│  • Android Keystore RSA-2048 Client Identity + Cert Pinning  │
 └──────────────────────────────┬──────────────────────────────┘
                                │
                 ┌──────────────▼──────────────┐
                 │       Television Target     │
-                │ Google TV / Android TV / LG │
+                │ Google TV / Android TV      │
                 └─────────────────────────────┘
 ```
 
@@ -95,9 +94,9 @@ Directly installable APK available under GitHub Releases:
 
 - **Language:** 100% Kotlin
 - **UI:** Jetpack Compose (Material 3 with custom 3D tactile theme)
-- **Cryptography:** Bouncy Castle (`bcpkix-jdk18on`, `bcprov-jdk18on`)
-- **Persistence:** AndroidX Room Database & SharedPreferences
-- **Networking:** Mutual TLS (SSLSocket), NSD (Network Service Discovery), Protobuf Wire Serialization
+- **Cryptography:** Android Keystore + Bouncy Castle (`bcpkix-jdk18on`, `bcprov-jdk18on`)
+- **Persistence:** AndroidX Room Database & DataStore
+- **Networking:** Mutual TLS (SSLSocket with certificate pinning), NSD (Network Service Discovery), Protobuf Wire Serialization
 - **Sensors:** Accelerometer & Gyroscope sensor fusion with complementary filtering
 
 ---

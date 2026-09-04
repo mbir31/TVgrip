@@ -116,7 +116,7 @@ fun GamepadScreen(
                 state = state,
                 onNavigateBack = onNavigateBack,
                 onSelectSlot = { viewModel.selectPlayerSlot(it) },
-                onOpenLobby = { viewModel.openLobbySheet() },
+                onOpenPlayerSettings = { viewModel.openPlayerSheet() },
                 onToggleLock = { viewModel.toggleLock() },
                 onToggleTurbo = { viewModel.toggleTurbo() },
                 onOpenProfiles = { profileMenuExpanded = true },
@@ -202,14 +202,14 @@ fun GamepadScreen(
             DeveloperCredit(modifier = Modifier.navigationBarsPadding())
         }
 
-        // Multiplayer 4-Player Lobby Sheet
-        if (state.isLobbySheetOpen) {
-            MultiplayerLobbySheet(
+        // Local player-slot / button-layout preset sheet
+        if (state.isPlayerSheetOpen) {
+            PlayerSlotSheet(
                 activeSlot = state.activePlayerSlot,
-                lobbySlots = state.lobbySlots,
+                playerSlots = state.playerSlots,
                 onSelectSlot = { viewModel.selectPlayerSlot(it) },
                 onTestRumble = { viewModel.testRumble(it) },
-                onDismiss = { viewModel.closeLobbySheet() }
+                onDismiss = { viewModel.closePlayerSheet() }
             )
         }
     }
@@ -220,7 +220,7 @@ private fun GamepadHudBar(
     state: GamepadUiState,
     onNavigateBack: () -> Unit,
     onSelectSlot: (PlayerSlot) -> Unit,
-    onOpenLobby: () -> Unit,
+    onOpenPlayerSettings: () -> Unit,
     onToggleLock: () -> Unit,
     onToggleTurbo: () -> Unit,
     onOpenProfiles: () -> Unit,
@@ -290,7 +290,7 @@ private fun GamepadHudBar(
         PlayerSlotSelector(
             activeSlot = state.activePlayerSlot,
             onSelectSlot = onSelectSlot,
-            onOpenLobby = onOpenLobby
+            onOpenPlayerSettings = onOpenPlayerSettings
         )
 
         // Right Controls

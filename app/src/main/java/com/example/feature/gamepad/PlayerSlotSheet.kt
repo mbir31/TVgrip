@@ -42,7 +42,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.core.model.LobbySlotInfo
+import com.example.core.model.PlayerSlotInfo
 import com.example.core.model.PlayerSlot
 import com.example.ui.components.TactileButton
 import com.example.ui.components.TactileCard
@@ -61,9 +61,9 @@ import com.example.ui.theme.GripTextTertiary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MultiplayerLobbySheet(
+fun PlayerSlotSheet(
     activeSlot: PlayerSlot,
-    lobbySlots: List<LobbySlotInfo>,
+    playerSlots: List<PlayerSlotInfo>,
     onSelectSlot: (PlayerSlot) -> Unit,
     onTestRumble: (PlayerSlot) -> Unit,
     onDismiss: () -> Unit,
@@ -99,7 +99,7 @@ fun MultiplayerLobbySheet(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Gamepad,
-                            contentDescription = "Lobby",
+                            contentDescription = "Player slot",
                             tint = Color(activeSlot.colorHex),
                             modifier = Modifier.size(22.dp)
                         )
@@ -109,13 +109,13 @@ fun MultiplayerLobbySheet(
 
                     Column {
                         Text(
-                            text = "Multiplayer Controller Lobby",
+                            text = "Controller Player Slot",
                             color = GripTextPrimary,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Black
                         )
                         Text(
-                            text = "Split-screen & Party Gaming (P1 - P4)",
+                            text = "Local button-layout presets (P1 - P4)",
                             color = GripTextSecondary,
                             fontSize = 12.sp
                         )
@@ -124,7 +124,7 @@ fun MultiplayerLobbySheet(
 
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier.testTag("lobby_close_button")
+                    modifier = Modifier.testTag("player_slots_close_button")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
@@ -137,7 +137,7 @@ fun MultiplayerLobbySheet(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "CONTROLLER SLOTS (4-PLAYER READY)",
+                text = "LOCAL PLAYER PRESETS",
                 color = Color(activeSlot.colorHex),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
@@ -147,7 +147,7 @@ fun MultiplayerLobbySheet(
             Spacer(modifier = Modifier.height(10.dp))
 
             // Player Slot Cards
-            lobbySlots.forEach { slotInfo ->
+            slots.forEach { slotInfo ->
                 val isCurrent = slotInfo.slot == activeSlot
                 val slotColor = Color(slotInfo.slot.colorHex)
 
@@ -229,7 +229,7 @@ fun MultiplayerLobbySheet(
                                     Spacer(modifier = Modifier.width(8.dp))
 
                                     Text(
-                                        text = if (isCurrent) "Port ${slotInfo.slot.slotIndex + 1} • 8ms • ${slotInfo.slot.accentName}" else "Port ${slotInfo.slot.slotIndex + 1} • Available",
+                                        text = if (isCurrent) "Preset ${slotInfo.slot.slotIndex + 1} • 8ms • ${slotInfo.slot.accentName}" else "Preset ${slotInfo.slot.slotIndex + 1} • Local",
                                         color = GripTextSecondary,
                                         fontSize = 12.sp
                                     )
@@ -258,10 +258,10 @@ fun MultiplayerLobbySheet(
                             if (!isCurrent) {
                                 TactileButton(
                                     onClick = { onSelectSlot(slotInfo.slot) },
-                                    text = "CLAIM",
+                                    text = "USE",
                                     accentColor = slotColor,
                                     modifier = Modifier.height(34.dp),
-                                    testTag = "claim_slot_${slotInfo.slot.label.lowercase()}"
+                                    testTag = "use_slot_${slotInfo.slot.label.lowercase()}"
                                 )
                             } else {
                                 Icon(
@@ -278,7 +278,7 @@ fun MultiplayerLobbySheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Game suggestions banner
+            // Protocol note banner
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -289,14 +289,14 @@ fun MultiplayerLobbySheet(
             ) {
                 Column {
                     Text(
-                        text = "🎮 Great Local Multiplayer Games on Android TV:",
+                        text = "🔧 Protocol note",
                         color = GripTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "• Beach Buggy Racing (Up to 4 Players split-screen)\n• BombSquad (8-player party mayhem)\n• Crossy Road (Multiplayer party mode)\n• RetroArch / MAME / PSX Emulators (Multi-controller)",
+                        text = "Android TV Remote v2 only exposes key injection. TVGrip sends real D-pad, ABXY, shoulder, trigger and system key events; analog sticks/triggers are mapped to directional/button key events instead of fake analog packets.",
                         color = GripTextSecondary,
                         fontSize = 11.sp,
                         lineHeight = 16.sp

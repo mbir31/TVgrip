@@ -30,7 +30,8 @@ data class TvDeviceEntity(
     val touchpadSupported: String,
     val airMouseSupported: String,
     val gamepadSupported: String,
-    val motionSupported: String
+    val motionSupported: String,
+    val serverCertSha256: String?
 ) {
     fun toDomain(): TvDevice {
         return TvDevice(
@@ -57,7 +58,8 @@ data class TvDeviceEntity(
             ),
             lastConnectedAt = lastConnectedAt,
             isPreferred = isPreferred,
-            isFavorite = isFavorite
+            isFavorite = isFavorite,
+            serverCertSha256 = serverCertSha256
         )
     }
 
@@ -88,7 +90,8 @@ data class TvDeviceEntity(
                 touchpadSupported = device.capabilities.touchpad.name,
                 airMouseSupported = device.capabilities.airMouse.name,
                 gamepadSupported = device.capabilities.gameController.name,
-                motionSupported = device.capabilities.motionSteering.name
+                motionSupported = device.capabilities.motionSteering.name,
+                serverCertSha256 = device.serverCertSha256
             )
         }
     }

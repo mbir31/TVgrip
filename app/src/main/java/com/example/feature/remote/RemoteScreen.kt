@@ -253,7 +253,7 @@ private fun ClassicRemoteView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Point phone at TV to move cursor",
+                        text = "Move phone to navigate the TV",
                         color = GripCyan,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
@@ -550,7 +550,7 @@ private fun TouchpadRemoteView(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Slide to Move Pointer · Tap to Click",
+                    text = "Slide to Navigate · Tap to Select",
                     color = GripTextSecondary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium
@@ -560,17 +560,17 @@ private fun TouchpadRemoteView(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Bottom Left/Right Click bar + Home
+        // Bottom Select / Long-press bar + Home
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             TactileButton(
                 onClick = { onSendPointerClick(false) },
-                text = "LEFT CLICK",
+                text = "SELECT",
                 isPrimary = true,
                 modifier = Modifier.weight(1.2f).height(54.dp),
-                testTag = "touchpad_left_click"
+                testTag = "touchpad_select"
             )
             Spacer(modifier = Modifier.width(10.dp))
             TactileButton(
@@ -582,9 +582,9 @@ private fun TouchpadRemoteView(
             Spacer(modifier = Modifier.width(10.dp))
             TactileButton(
                 onClick = { onSendPointerClick(true) },
-                text = "RIGHT CLICK",
+                text = "LONG PRESS",
                 modifier = Modifier.weight(1.2f).height(54.dp),
-                testTag = "touchpad_right_click"
+                testTag = "touchpad_long_press"
             )
         }
     }

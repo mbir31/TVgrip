@@ -619,7 +619,7 @@ private fun StepTestingCapabilities() {
         Spacer(modifier = Modifier.height(20.dp))
 
         Text(
-            text = "Verifying TV Capabilities...",
+            text = "Starting the authenticated remote session...",
             color = GripTextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold
@@ -628,7 +628,7 @@ private fun StepTestingCapabilities() {
         Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "Configuring D-pad, media controls, gamepad mode, and keyboard channels",
+            text = "Waiting for the TV to confirm a usable Android TV Remote v2 session.",
             color = GripTextSecondary,
             fontSize = 13.sp,
             textAlign = TextAlign.Center
@@ -677,7 +677,7 @@ private fun StepReady(
         Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "${device?.name ?: "TV"} is paired and ready for full control.",
+            text = "${device?.name ?: "TV"} is paired and connected. Press a button to verify it responds on the TV.",
             color = GripTextSecondary,
             fontSize = 14.sp,
             textAlign = TextAlign.Center

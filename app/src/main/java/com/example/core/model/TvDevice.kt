@@ -19,7 +19,8 @@ data class TvDevice(
     val lastConnectedAt: Long = 0L,
     val isPreferred: Boolean = false,
     val isFavorite: Boolean = false,
-    val pingMs: Long = -1L
+    val pingMs: Long = -1L,
+    val serverCertSha256: String? = null
 )
 
 enum class ProtocolType {
@@ -56,12 +57,31 @@ data class CapabilitySet(
     val currentAppDetection: CapabilityLevel = CapabilityLevel.LIMITED
 ) {
     companion object {
-        val DEFAULT_ANDROID_TV = CapabilitySet()
-        val FULLY_FEATURED = CapabilitySet(
-            power = CapabilityLevel.SUPPORTED,
-            motionSteering = CapabilityLevel.SUPPORTED,
-            currentAppDetection = CapabilityLevel.SUPPORTED
+        /**
+         * Honest capabilities for the Android TV Remote v2 protocol: D-pad,
+         * OK/back/home, media and volume keys, IME text injection and app links
+         * are real. Touch/air-mouse is a navigation-key alternative (there is
+         * no absolute pointer stream in the protocol), and controller support
+         * is button/d-pad key injection only (no analog stream).
+         */
+        val DEFAULT_ANDROID_TV = CapabilitySet(
+            remoteNavigation = CapabilityLevel.SUPPORTED,
+            volumeControl = CapabilityLevel.SUPPORTED,
+            mute = CapabilityLevel.SUPPORTED,
+            power = CapabilityLevel.LIMITED,
+            mediaControl = CapabilityLevel.SUPPORTED,
+            keyboardInput = CapabilityLevel.SUPPORTED,
+            clipboardSync = CapabilityLevel.LIMITED,
+            touchpad = CapabilityLevel.LIMITED,
+            airMouse = CapabilityLevel.LIMITED,
+            appLaunch = CapabilityLevel.SUPPORTED,
+            gameController = CapabilityLevel.LIMITED,
+            motionSteering = CapabilityLevel.LIMITED,
+            voiceInput = CapabilityLevel.LIMITED,
+            currentAppDetection = CapabilityLevel.LIMITED
         )
+
+        val FULLY_FEATURED = DEFAULT_ANDROID_TV
     }
 }
 
@@ -99,7 +119,19 @@ enum class TvKey(val code: Int, val label: String) {
     SETTINGS(176, "SETTINGS"),
     RECENT_APPS(187, "RECENT_APPS"),
     ENTER(66, "ENTER"),
-    BACKSPACE(67, "BACKSPACE")
+    BACKSPACE(67, "BACKSPACE"),
+    BUTTON_A(96, "BUTTON_A"),
+    BUTTON_B(97, "BUTTON_B"),
+    BUTTON_X(99, "BUTTON_X"),
+    BUTTON_Y(100, "BUTTON_Y"),
+    BUTTON_L1(102, "BUTTON_L1"),
+    BUTTON_R1(103, "BUTTON_R1"),
+    BUTTON_L2(104, "BUTTON_L2"),
+    BUTTON_R2(105, "BUTTON_R2"),
+    BUTTON_THUMBL(106, "BUTTON_THUMBL"),
+    BUTTON_THUMBR(107, "BUTTON_THUMBR"),
+    BUTTON_START(108, "BUTTON_START"),
+    BUTTON_SELECT(109, "BUTTON_SELECT")
 }
 
 @Immutable

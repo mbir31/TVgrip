@@ -21,7 +21,7 @@ enum class PlayerSlot(
 }
 
 @Immutable
-data class LobbySlotInfo(
+data class PlayerSlotInfo(
     val slot: PlayerSlot,
     val deviceName: String,
     val isLocalDevice: Boolean = false,
@@ -77,22 +77,22 @@ data class GamepadState(
 }
 
 enum class ControllerButton(val label: String, val defaultTvKey: TvKey) {
-    A("A", TvKey.CENTER),
-    B("B", TvKey.BACK),
-    X("X", TvKey.MENU),
-    Y("Y", TvKey.HOME),
-    L1("L1", TvKey.MEDIA_PREVIOUS),
-    R1("R1", TvKey.MEDIA_NEXT),
-    L2("L2", TvKey.VOLUME_DOWN),
-    R2("R2", TvKey.VOLUME_UP),
-    L3("L3", TvKey.CENTER),
-    R3("R3", TvKey.SETTINGS),
+    A("A", TvKey.BUTTON_A),
+    B("B", TvKey.BUTTON_B),
+    X("X", TvKey.BUTTON_X),
+    Y("Y", TvKey.BUTTON_Y),
+    L1("L1", TvKey.BUTTON_L1),
+    R1("R1", TvKey.BUTTON_R1),
+    L2("L2", TvKey.BUTTON_L2),
+    R2("R2", TvKey.BUTTON_R2),
+    L3("L3", TvKey.BUTTON_THUMBL),
+    R3("R3", TvKey.BUTTON_THUMBR),
     DPAD_UP("UP", TvKey.UP),
     DPAD_DOWN("DOWN", TvKey.DOWN),
     DPAD_LEFT("LEFT", TvKey.LEFT),
     DPAD_RIGHT("RIGHT", TvKey.RIGHT),
-    START("START", TvKey.MENU),
-    SELECT("SELECT", TvKey.INPUT_SOURCE),
+    START("START", TvKey.BUTTON_START),
+    SELECT("SELECT", TvKey.BUTTON_SELECT),
     HOME("HOME", TvKey.HOME),
     MENU("MENU", TvKey.MENU),
     BACK("BACK", TvKey.BACK)

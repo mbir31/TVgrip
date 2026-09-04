@@ -159,17 +159,17 @@ fun AboutScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(imageVector = Icons.Default.Speed, contentDescription = null, tint = GripEmerald, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "<10ms Gaming Latency Protocol Engine", color = GripTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(text = "Real-time Android TV Remote v2 Protocol Engine", color = GripTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(imageVector = Icons.Default.Gamepad, contentDescription = null, tint = GripCyan, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "Dual Thumbsticks, ABXY, Triggers & Motion Steering", color = GripTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(text = "D-pad, ABXY, Triggers & Motion Steering mapped to real TV key events", color = GripTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(imageVector = Icons.Default.Security, contentDescription = null, tint = GripOrangeBright, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "Zero-Knowledge Local TLS v1.3 Discovery & Sync", color = GripTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(text = "Mutual TLS with Android Keystore identity & server fingerprint pinning", color = GripTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(imageVector = Icons.Default.Code, contentDescription = null, tint = GripTextSecondary, modifier = Modifier.size(18.dp))

@@ -112,7 +112,7 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(text = "Auto-Reconnect to Preferred TV", color = GripTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(text = "Connects instantly upon launch", color = GripTextTertiary, fontSize = 11.sp)
+                                    Text(text = "Reconnects to the last paired TV when the app opens", color = GripTextTertiary, fontSize = 11.sp)
                                 }
                             }
                             Switch(
@@ -154,7 +154,7 @@ fun SettingsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(imageVector = Icons.Default.Mouse, contentDescription = null, tint = GripCyan, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "Air Mouse Pointer Sensitivity", color = GripTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "Air Mouse Navigation Sensitivity", color = GripTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Slider(

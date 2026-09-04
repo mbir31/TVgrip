@@ -20,9 +20,9 @@ import java.io.OutputStream
  * }
  * 
  * message Options {
- *     optional RoleType preferred_role = 1;
- *     repeated Encoding input_encodings = 2;
- *     repeated Encoding output_encodings = 3;
+ *     repeated Encoding input_encodings = 1;
+ *     repeated Encoding output_encodings = 2;
+ *     optional RoleType preferred_role = 3;
  * }
  * 
  * message PairingRequest {
@@ -131,15 +131,15 @@ object PoloProtocol {
         val outputEncodings: List<Encoding> = emptyList()
     ) {
         fun encode(out: OutputStream) {
-            ProtobufWriter.writeVarintField(out, 1, preferredRole.value.toLong())
             inputEncodings.forEach { enc ->
                 val encBytes = ByteArrayOutputStream().apply { enc.encode(this) }.toByteArray()
-                ProtobufWriter.writeLengthDelimitedField(out, 2, encBytes)
+                ProtobufWriter.writeLengthDelimitedField(out, 1, encBytes)
             }
             outputEncodings.forEach { enc ->
                 val encBytes = ByteArrayOutputStream().apply { enc.encode(this) }.toByteArray()
-                ProtobufWriter.writeLengthDelimitedField(out, 3, encBytes)
+                ProtobufWriter.writeLengthDelimitedField(out, 2, encBytes)
             }
+            ProtobufWriter.writeVarintField(out, 3, preferredRole.value.toLong())
         }
 
         companion object {
@@ -152,9 +152,9 @@ object PoloProtocol {
                 while (reader.hasNextTag()) {
                     val (field, wire) = reader.readTag()
                     when (field) {
-                        1 -> role = RoleType.fromValue(reader.readVarint().toInt())
-                        2 -> inEncodings.add(Encoding.decode(reader.readLengthDelimited()))
-                        3 -> outEncodings.add(Encoding.decode(reader.readLengthDelimited()))
+                        1 -> inEncodings.add(Encoding.decode(reader.readLengthDelimited()))
+                        2 -> outEncodings.add(Encoding.decode(reader.readLengthDelimited()))
+                        3 -> role = RoleType.fromValue(reader.readVarint().toInt())
                         else -> reader.skipField(wire)
                     }
                 }

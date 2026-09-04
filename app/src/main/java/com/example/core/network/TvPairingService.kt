@@ -19,8 +19,22 @@ import javax.net.ssl.X509TrustManager
 
 sealed class PairingResult {
     data class CodePromptReceived(val promptMessage: String) : PairingResult()
-    data class Success(val message: String = "Pairing successful") : PairingResult()
+    data class Success(
+        val message: String = "Pairing successful",
+        val serverCertSha256: String? = null
+    ) : PairingResult()
     data class Failed(val error: String) : PairingResult()
+}
+
+/**
+ * Returns the lowercase SHA-256 of the DER-encoded peer certificate. Used to
+ * pin the Android TV server certificate so a later remote session can verify
+ * it is the same TV that was paired.
+ */
+fun serverCertificateSha256(cert: X509Certificate): String {
+    return MessageDigest.getInstance("SHA-256")
+        .digest(cert.encoded)
+        .joinToString("") { "%02x".format(it) }
 }
 
 /**
@@ -48,6 +62,7 @@ class TvPairingService(private val context: Context) {
     private var pairingSocket: SSLSocket? = null
     private var clientCert: X509Certificate? = null
     private var serverCert: X509Certificate? = null
+    private var serverCertSha256: String? = null
     private var negotiatedEncoding: PoloProtocol.EncodingType = PoloProtocol.EncodingType.ENCODING_TYPE_HEXADECIMAL
     private var negotiatedSymbolLength: Int = 6
 
@@ -108,9 +123,10 @@ class TvPairingService(private val context: Context) {
                     }
                 }
                 serverCert = capturedServerCert
+                serverCertSha256 = capturedServerCert?.let { serverCertificateSha256(it) }
                 pairingSocket = sslSocket
 
-                Log.d(TAG, "TLS_CONNECTED on port $pairingPort. Client: ${clientCert?.subjectDN}, Server: ${serverCert?.subjectDN}")
+                Log.d(TAG, "TLS_CONNECTED on port $pairingPort. Server fingerprint: $serverCertSha256")
 
                 val output = sslSocket.getOutputStream()
                 val input = sslSocket.getInputStream()
@@ -291,8 +307,9 @@ class TvPairingService(private val context: Context) {
 
                 if (secretAckMsg.status == PoloProtocol.Status.STATUS_OK || secretAckMsg.secretAck != null) {
                     Log.d(TAG, "PAIRING_SUCCESS — TV successfully paired and authenticated.")
+                    val fingerprint = serverCertSha256
                     disconnect()
-                    PairingResult.Success("TV successfully paired and verified!")
+                    PairingResult.Success("TV successfully paired and verified!", fingerprint)
                 } else {
                     Log.w(TAG, "TV rejected pairing secret with status ${secretAckMsg.status}")
                     disconnect()
@@ -333,6 +350,7 @@ class TvPairingService(private val context: Context) {
             pairingSocket = null
             serverCert = null
             clientCert = null
+            serverCertSha256 = null
         }
     }
 }

@@ -2,7 +2,6 @@ package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.example.core.bluetooth.BluetoothTvRemoteManager
 import com.example.core.model.CapabilitySet
 import com.example.core.model.DeviceConnectionState
 import com.example.core.model.GamepadState
@@ -11,9 +10,7 @@ import com.example.core.model.ProtocolType
 import com.example.core.model.TvCommand
 import com.example.core.model.TvDevice
 import com.example.core.model.TvKey
-import com.example.core.network.AndroidTvRemoteProtocol
 import com.example.core.network.SslCertificateManager
-import com.example.core.network.TVGripCompanionProtocol
 import com.example.core.network.TvConnectionManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
