@@ -24,6 +24,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.security.cert.CertificateException
@@ -317,7 +318,17 @@ class AndroidTvRemoteProtocol(
         try {
             val input = inputStream ?: return
             while (kotlinx.coroutines.currentCoroutineContext().isActive && sslSocket?.isClosed == false) {
-                val payload = readDelimitedMessage(input) ?: continue
+                val payload = try {
+                    readDelimitedMessage(input)
+                } catch (e: SocketTimeoutException) {
+                    // The TV is quiet but the session is still authenticated. A
+                    // single read timeout is not proof the remote went away; the
+                    // ping loop will confirm the link, and a write error will
+                    // tear the session down if it is really gone.
+                    Log.d(TAG, "Remote session read timed out (TV quiet); continuing to listen.")
+                    continue
+                }
+                if (payload == null) continue
                 handleIncomingMessage(payload, readySignal)
             }
         } catch (e: EOFException) {
