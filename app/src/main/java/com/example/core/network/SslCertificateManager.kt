@@ -237,7 +237,9 @@ object SslCertificateManager {
         val now = System.currentTimeMillis()
         val startDate = Date(now - 24 * 3600 * 1000L)
         val endDate = Date(now + 20L * 365 * 24 * 3600 * 1000L)
-        val serialNumber = BigInteger(64, SecureRandom())
+        // Positive serial number (avoid the sign bit so the generated
+        // self-signed client certificate is accepted by strict TLS stacks).
+        val serialNumber = BigInteger(63, SecureRandom())
 
         val subject = X500Name("CN=$CLIENT_NAME")
         val builder = JcaX509v3CertificateBuilder(
