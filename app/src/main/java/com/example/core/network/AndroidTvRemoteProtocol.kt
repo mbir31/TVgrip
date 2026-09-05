@@ -25,15 +25,8 @@ import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
-import java.security.MessageDigest
-import java.security.SecureRandom
-import java.security.cert.CertificateException
-import java.security.cert.X509Certificate
 import java.util.concurrent.atomic.AtomicBoolean
-import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 import kotlin.math.abs
 
 /**
@@ -112,11 +105,6 @@ class AndroidTvRemoteProtocol(
         private const val KEY_BUTTON_SELECT = 109
 
         private val POINTER_THRESHOLD = 22f
-
-        fun sha256Hex(bytes: ByteArray): String =
-            MessageDigest.getInstance("SHA-256")
-                .digest(bytes)
-                .joinToString("") { "%02x".format(it) }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -171,11 +159,10 @@ class AndroidTvRemoteProtocol(
                             "Remove and re-pair the TV in TVGrip so the TV identity can be verified."
                     )
                 }
-                val keyManagerFactory = SslCertificateManager.getOrCreateKeyManagerFactory(context)
-                val sslContext = buildSslContext(
-                    keyManagerFactory,
-                    expectedServerFingerprint = expectedFingerprint
-                )
+                // Build the authenticated remote TLS context with the paired TV's
+                // certificate fingerprint pinned (DANE-style). This reuses the same
+                // client identity used for pairing.
+                val sslContext = SslCertificateManager.buildRemoteSslContext(context, expectedFingerprint)
 
                 val rawSocket = Socket()
                 rawSocket.connect(InetSocketAddress(host, remotePort), CONNECT_TIMEOUT_MS)
@@ -597,43 +584,6 @@ class AndroidTvRemoteProtocol(
             writeLengthDelimitedField(this, 8, ping) // remote_ping_request
         }.toByteArray()
         writeDelimited(stream, outer)
-    }
-
-    // ---------- TLS ----------
-
-    private fun buildSslContext(
-        keyManagerFactory: javax.net.ssl.KeyManagerFactory,
-        expectedServerFingerprint: String?
-    ): SSLContext {
-        val trustManager = object : X509TrustManager {
-            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-
-            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-
-            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-                if (chain.isEmpty()) {
-                    throw CertificateException("TV presented no TLS certificate")
-                }
-                if (!expectedServerFingerprint.isNullOrBlank()) {
-                    val actual = sha256Hex(chain[0].encoded)
-                    if (!actual.equals(expectedServerFingerprint, ignoreCase = true)) {
-                        throw CertificateException(
-                            "TV server certificate fingerprint mismatch. The TV may have been reset or re-paired. Remove and pair it again in TVGrip."
-                        )
-                    }
-                }
-                // The Android TV Remote service presents a self-signed certificate
-                // and the pairing secret is what authenticates the TV. On reconnect
-                // we additionally pin the server's exact DER certificate.
-            }
-        }
-        val ctx = SSLContext.getInstance("TLS")
-        ctx.init(
-            keyManagerFactory.keyManagers,
-            arrayOf<TrustManager>(trustManager),
-            SecureRandom()
-        )
-        return ctx
     }
 
     // ---------- Framing and wire helpers ----------
