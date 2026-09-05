@@ -119,6 +119,19 @@ class PairingViewModel : ViewModel() {
         _step.value = PairingStep.CONNECTING
 
         viewModelScope.launch {
+            // Guarantee a correctly initialized TLS client identity / pairing
+            // session BEFORE any pairing command is sent to the TV. This is the
+            // explicit guard against the "Not initialized" failure: if the secure
+            // identity cannot be prepared, we fail fast with a clear message
+            // instead of letting a not-initialized TLS context reach the wire.
+            if (!pairingService.initialize()) {
+                _errorMessage.value =
+                    "Could not initialize the secure pairing session (client TLS certificate). " +
+                        "Reopen TVGrip and try again."
+                _step.value = PairingStep.ERROR
+                return@launch
+            }
+
             when (val result = pairingService.startPairing(device)) {
                 is PairingResult.CodePromptReceived -> {
                     _pairingPrompt.value = result.promptMessage

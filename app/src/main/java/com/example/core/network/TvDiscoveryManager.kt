@@ -115,6 +115,28 @@ class TvDiscoveryManager(private val context: Context) {
         }
     }
 
+    /**
+     * Returns the TV's IP address from an mDNS-resolved service. On some Android
+     * versions/ROMs [NsdServiceInfo.host] is null even inside [onServiceResolved];
+     * fall back to [NsdServiceInfo.hostAddresses] (API 26+) so discovery always
+     * yields a connectable device instead of being silently dropped.
+     */
+    private fun resolveHostAddress(serviceInfo: NsdServiceInfo): String? {
+        serviceInfo.host?.hostAddress?.let { if (it.isNotBlank()) return it }
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                serviceInfo.hostAddresses
+                    ?.asSequence()
+                    ?.firstOrNull { addr -> addr != null && addr.hostAddress != null }
+                    ?.hostAddress
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun resolveService(serviceInfo: NsdServiceInfo) {
         try {
             val resolveListener = object : NsdManager.ResolveListener {
@@ -123,7 +145,7 @@ class TvDiscoveryManager(private val context: Context) {
                 }
 
                 override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
-                    val hostAddress = serviceInfo.host?.hostAddress ?: return
+                    val hostAddress = resolveHostAddress(serviceInfo) ?: return
                     val cleanName = serviceInfo.serviceName.replace("\\032", " ").trim()
                     val id = "tv_${hostAddress.replace(".", "_")}"
 
