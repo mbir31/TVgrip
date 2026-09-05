@@ -126,20 +126,23 @@ jobs:
           fi
           TAG_NAME="debug-apk-build-${{ github.run_number }}-${{ github.run_attempt }}"
           TITLE="Debug APK Build #${{ github.run_number }}"
-          NOTES="### Debug APK Build #${{ github.run_number }} (Attempt #${{ github.run_attempt }})
-
-This is an automatically generated debug APK.
-- **Built by:** GitHub Actions
-- **Run Number:** ${{ github.run_number }}
-- **Run Attempt:** ${{ github.run_attempt }}
-- **Source Commit:** ${{ github.sha }}
-- **Asset Filename:** \`${ASSET_NAME}\`
-
-> ⚠️ **Notice:** This APK is intended for testing and development purposes. It is not a Play Store production release and is signed only with a temporary debug keystore."
+          NOTES_FILE="/tmp/release_notes.md"
+          {
+            echo "### Debug APK Build #${{ github.run_number }} (Attempt #${{ github.run_attempt }})"
+            echo ""
+            echo "This is an automatically generated debug APK."
+            echo "- **Built by:** GitHub Actions"
+            echo "- **Run Number:** ${{ github.run_number }}"
+            echo "- **Run Attempt:** ${{ github.run_attempt }}"
+            echo "- **Source Commit:** ${{ github.sha }}"
+            echo "- **Asset Filename:** \`${ASSET_NAME}\`"
+            echo ""
+            echo "> ⚠️ **Notice:** This APK is intended for testing and development purposes. It is not a Play Store production release and is signed only with a temporary debug keystore."
+          } > "$NOTES_FILE"
 
           gh release create "$TAG_NAME" "$ASSET_PATH" \
             --title "$TITLE" \
-            --notes "$NOTES" \
+            --notes-file "$NOTES_FILE" \
             --target "${{ github.sha }}" \
             --latest
 
